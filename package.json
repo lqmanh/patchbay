@@ -1,0 +1,34 @@
+{
+  "name": "patchbay",
+  "version": "0.1.0",
+  "description": "Per-domain VPN routing for macOS",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun run src/index.tsx",
+    "start": "bun run src/index.tsx",
+    "build": "bun run scripts/build.ts",
+    "smoke": "bun run scripts/smoke.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "tsc --noEmit && oxlint && prettier --check ."
+  },
+  "dependencies": {
+    "@opentui/core": "^0.5.17",
+    "@opentui/solid": "^0.5.17",
+    "solid-js": "1.9.12"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "oxlint": "^1.87.0",
+    "prettier": "^3.9.9",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "bun": ">=1.4.0"
+  }
+}
