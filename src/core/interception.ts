@@ -18,17 +18,17 @@ import {
   type LaunchdStatus,
 } from "../platform/launchd";
 import { writeJson } from "./json";
-import { logFile, proxyStateFile, stateDir, wireproxyConfigFile } from "./paths";
+import { daemonConfigFile, logFile, proxyStateFile, stateDir } from "./paths";
 import {
   daemonStatus,
-  requireWireproxyBinary,
+  requireSingboxBinary,
   restartDaemon,
   startDaemon,
   stopDaemon,
   writeGeneratedConfig,
   type DaemonStatus,
   type RunOptions,
-} from "./wireproxy";
+} from "./singbox";
 
 export type SavedProxyState = SocksState & { service: string };
 
@@ -132,23 +132,19 @@ export async function disableInterception(): Promise<void> {
 
 export async function restartService(options: RunOptions): Promise<void> {
   if (isLaunchAgentInstalled()) {
-    await installLaunchAgent(
-      requireWireproxyBinary(),
-      wireproxyConfigFile(),
-      options.healthPort,
-      logFile(),
-    );
+    await writeGeneratedConfig(options);
+    await installLaunchAgent(requireSingboxBinary(), daemonConfigFile(), logFile());
   } else {
     await restartDaemon(options);
   }
 }
 
 export async function installLaunchAtLogin(options: RunOptions): Promise<void> {
-  const binary = requireWireproxyBinary();
+  const binary = requireSingboxBinary();
 
   await writeGeneratedConfig(options);
   await stopDaemon();
-  await installLaunchAgent(binary, wireproxyConfigFile(), options.healthPort, logFile());
+  await installLaunchAgent(binary, daemonConfigFile(), logFile());
 }
 
 export async function uninstallLaunchAtLogin(): Promise<void> {

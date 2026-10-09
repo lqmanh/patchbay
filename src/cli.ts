@@ -2,7 +2,7 @@ import { loadConfig } from "./core/config";
 import { disableInterception, enableInterception } from "./core/interception";
 import { requireRunOptions } from "./core/options";
 import { listServers } from "./core/servers";
-import { waitForReachable, type RunOptions } from "./core/wireproxy";
+import { waitForReachable, type RunOptions } from "./core/singbox";
 
 export async function runIntercept(action: string): Promise<number> {
   const config = await loadConfig();
@@ -21,7 +21,7 @@ export async function runIntercept(action: string): Promise<number> {
     return 0;
   }
 
-  await waitForReachable(config.healthPort);
+  await waitForReachable(config.socksPort);
   await enableInterception(options);
   console.log("interception on");
   return 0;

@@ -11,31 +11,32 @@ import {
 describe("launch agent", () => {
   test("lives in the user's LaunchAgents directory", () => {
     expect(launchAgentPath()).toBe(
-      join(homedir(), "Library", "LaunchAgents", "dev.patchbay.wireproxy.plist"),
+      join(homedir(), "Library", "LaunchAgents", "dev.patchbay.daemon.plist"),
     );
   });
 
-  test("builds a keep-alive plist with the wireproxy arguments", () => {
+  test("builds a keep-alive plist with the sing-box arguments", () => {
     const plist = buildLaunchAgentPlist({
-      binary: "/Users/me/.local/bin/wireproxy",
-      configPath: "/Users/me/.cache/patchbay/wireproxy.conf",
-      healthPort: 9080,
-      logPath: "/Users/me/.local/state/patchbay/wireproxy.log",
+      binary: "/opt/homebrew/bin/sing-box",
+      configPath: "/Users/me/.cache/patchbay/daemon.json",
+      logPath: "/Users/me/.local/state/patchbay/daemon.log",
     });
 
-    expect(plist).toContain("<string>dev.patchbay.wireproxy</string>");
+    expect(plist).toContain("<string>dev.patchbay.daemon</string>");
     expect(plist).toContain("<key>KeepAlive</key>");
     expect(plist).toContain("<key>RunAtLoad</key>");
-    expect(plist).toContain("<string>/Users/me/.local/bin/wireproxy</string>");
-    expect(plist).toContain("<string>127.0.0.1:9080</string>");
+    expect(plist).toContain("<string>/opt/homebrew/bin/sing-box</string>");
+    expect(plist).toContain("<string>run</string>");
+    expect(plist).toContain("<string>-c</string>");
+    expect(plist).toContain("<string>/Users/me/.cache/patchbay/daemon.json</string>");
+    expect(plist).toContain("<string>--disable-color</string>");
     expect(plist).toContain("<key>StandardOutPath</key>");
   });
 
   test("escapes xml-sensitive characters", () => {
     const plist = buildLaunchAgentPlist({
-      binary: "/Users/me/&co/wireproxy",
-      configPath: "/tmp/<config>.conf",
-      healthPort: 9080,
+      binary: "/Users/me/&co/sing-box",
+      configPath: "/tmp/<config>.json",
       logPath: "/tmp/log",
     });
 

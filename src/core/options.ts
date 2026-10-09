@@ -1,7 +1,7 @@
 import type { AppConfig } from "./config";
 import { serversDir } from "./paths";
 import { pickServer, type Server } from "./servers";
-import type { RunOptions } from "./wireproxy";
+import type { RunOptions } from "./singbox";
 
 export function buildRunOptions(config: AppConfig, servers: Server[]): RunOptions | null {
   const server = pickServer(servers, config.activeServer);
@@ -9,7 +9,6 @@ export function buildRunOptions(config: AppConfig, servers: Server[]): RunOption
   return {
     serverFile: server.file,
     socksPort: config.socksPort,
-    healthPort: config.healthPort,
     mode: config.mode,
     domains: config.domains,
   };

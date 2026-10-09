@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { runChecked } from "./exec";
 
-const DAEMON_LABEL = "dev.patchbay.wireproxy";
+const DAEMON_LABEL = "dev.patchbay.daemon";
 const INTERCEPT_LABEL = "dev.patchbay.intercept";
 
 export type LaunchdStatus = {
@@ -65,18 +65,11 @@ ${keepAliveXml}  <key>StandardOutPath</key>
 export function buildLaunchAgentPlist(options: {
   binary: string;
   configPath: string;
-  healthPort: number;
   logPath: string;
 }): string {
   return buildPlist({
     label: DAEMON_LABEL,
-    args: [
-      options.binary,
-      "-c",
-      options.configPath,
-      "-i",
-      `127.0.0.1:${options.healthPort}`,
-    ],
+    args: [options.binary, "run", "-c", options.configPath, "--disable-color"],
     logPath: options.logPath,
     keepAlive: true,
   });
@@ -109,12 +102,11 @@ export async function launchdStatus(): Promise<LaunchdStatus> {
 export async function installLaunchAgent(
   binary: string,
   configPath: string,
-  healthPort: number,
   logPath: string,
 ): Promise<void> {
   await installAgent(
     DAEMON_LABEL,
-    buildLaunchAgentPlist({ binary, configPath, healthPort, logPath }),
+    buildLaunchAgentPlist({ binary, configPath, logPath }),
   );
 }
 

@@ -1,12 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createRule,
-  domainPattern,
-  enabledPatterns,
-  normalizeDomain,
-  regexError,
-  type DomainRule,
-} from "./domains";
+import { createRule, normalizeDomain, regexError } from "./domains";
 
 describe("normalizeDomain", () => {
   test("normalizes urls, ports and case", () => {
@@ -21,20 +14,6 @@ describe("normalizeDomain", () => {
     expect(normalizeDomain("single-label")).toBeNull();
     expect(normalizeDomain("has space.com")).toBeNull();
     expect(normalizeDomain("https://")).toBeNull();
-  });
-});
-
-describe("domainPattern", () => {
-  test("matches the domain and its subdomains only", () => {
-    const pattern = domainPattern("reddit.com");
-    expect(pattern).toBe("^(.*\\.)?reddit\\.com$");
-
-    const matches = new RegExp(pattern);
-    expect(matches.test("reddit.com")).toBe(true);
-    expect(matches.test("www.reddit.com")).toBe(true);
-    expect(matches.test("old.reddit.com")).toBe(true);
-    expect(matches.test("reddit.com.evil.com")).toBe(false);
-    expect(matches.test("notreddit.com")).toBe(false);
   });
 });
 
@@ -64,19 +43,5 @@ describe("createRule", () => {
     });
     expect(createRule("(?=bad)", "regex")).toBeNull();
     expect(createRule("not a domain")).toBeNull();
-  });
-});
-
-describe("enabledPatterns", () => {
-  test("skips disabled rules", () => {
-    const rules: DomainRule[] = [
-      { id: "a", value: "reddit.com", kind: "domain", enabled: true },
-      { id: "b", value: "medium.com", kind: "domain", enabled: false },
-      { id: "c", value: "^ads\\.example\\.com$", kind: "regex", enabled: true },
-    ];
-    expect(enabledPatterns(rules)).toEqual([
-      "^(.*\\.)?reddit\\.com$",
-      "^ads\\.example\\.com$",
-    ]);
   });
 });

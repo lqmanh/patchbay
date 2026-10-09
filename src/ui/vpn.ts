@@ -23,43 +23,27 @@ import {
 import { buildRunOptions, requireRunOptions } from "../core/options";
 import { listServers, pickServer, type Server } from "../core/servers";
 import {
-  daemonHealth,
-  parseMetrics,
+  isReachable,
   readLog,
   startDaemon,
   waitForReachable,
-  type Health,
   type RunOptions,
-  type TunnelStats,
-} from "../core/wireproxy";
+} from "../core/singbox";
 import {
   isInterceptAgentInstalled,
   launchdStatus,
   type LaunchdStatus,
 } from "../platform/launchd";
 
-const HEALTH_POLL_MS = 60_000;
+const STATUS_POLL_MS = 60_000;
 const LOG_POLL_MS = 5000;
 const LOG_WINDOW_LINES = 1000;
 const LOG_KEEP_LINES = 2000;
 
-export function formatBytes(value: number | null): string {
-  if (value === null) return "—";
-  const units = ["B", "KiB", "MiB", "GiB"];
-  let size = value;
-  let unit = 0;
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024;
-    unit++;
-  }
-  return `${unit > 0 && size < 10 ? size.toFixed(1) : Math.round(size)} ${units[unit]}`;
-}
-
 export function createVpn() {
   const [config, setConfig] = createSignal<AppConfig>(freshConfig());
   const [servers, setServers] = createSignal<Server[]>([]);
-  const [health, setHealth] = createSignal<Health | null>(null);
-  const [stats, setStats] = createSignal<TunnelStats | null>(null);
+  const [ready, setReady] = createSignal<boolean | null>(null);
   const [interception, setInterception] = createSignal<InterceptionStatus | null>(null);
   const [launchAgent, setLaunchAgent] = createSignal<LaunchdStatus>({
     installed: false,
@@ -94,12 +78,9 @@ export function createVpn() {
     setInterceptAgent(isInterceptAgentInstalled());
 
     if (inter.daemon.state === "running") {
-      const result = await daemonHealth(config().healthPort);
-      setHealth(result);
-      setStats(result.metrics ? parseMetrics(result.metrics) : null);
+      setReady(await isReachable(config().socksPort));
     } else {
-      setHealth(null);
-      setStats(null);
+      setReady(null);
     }
   }
 
@@ -112,7 +93,7 @@ export function createVpn() {
     if (!inter?.proxy?.enabled || inter.daemon.state === "running") return false;
     try {
       await ensureDaemon(requireRunOptions(config(), servers()));
-      await waitForReachable(config().healthPort, 8, 250);
+      await waitForReachable(config().socksPort, 8, 250);
     } catch {
       await disableInterception().catch(() => undefined);
     }
@@ -125,7 +106,7 @@ export function createVpn() {
       void refreshLog();
       await refresh();
       if (await healBrokenInterception()) await refresh();
-      timer = setInterval(() => void refresh(), HEALTH_POLL_MS);
+      timer = setInterval(() => void refresh(), STATUS_POLL_MS);
       logTimer = setInterval(() => void refreshLog(), LOG_POLL_MS);
     })();
   });
@@ -232,12 +213,12 @@ export function createVpn() {
     });
   }
 
-  async function setPort(kind: "socksPort" | "healthPort", raw: string): Promise<void> {
+  async function setSocksPort(raw: string): Promise<void> {
     if (intercepting()) return;
     const port = Number(raw.trim());
     if (!isPort(port)) return;
     await mutateAndApply((draft) => {
-      draft[kind] = port;
+      draft.socksPort = port;
     });
   }
 
@@ -274,8 +255,7 @@ export function createVpn() {
   return {
     config,
     servers,
-    health,
-    stats,
+    ready,
     interception,
     launchAgent,
     interceptAgent,
@@ -292,7 +272,7 @@ export function createVpn() {
     selectServer,
     restart,
     setMode,
-    setPort,
+    setSocksPort,
     toggleLaunchAtLogin,
     toggleInterceptAtLogin,
   };

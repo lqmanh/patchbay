@@ -10,20 +10,14 @@ import { useRenderer } from "@opentui/solid";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { serversDir } from "../core/paths";
 import { theme } from "./theme";
-import { createVpn, formatBytes } from "./vpn";
+import { createVpn } from "./vpn";
 
 type Pane = "servers" | "rules";
 type Screen = "main" | "settings";
-type PromptKind = "domain" | "socksPort" | "healthPort";
+type PromptKind = "domain" | "socksPort";
 type Prompt = { kind: PromptKind; value: string; ruleId?: string };
 
-const SETTINGS = [
-  "mode",
-  "socksPort",
-  "healthPort",
-  "launchAtLogin",
-  "interceptionAtLogin",
-] as const;
+const SETTINGS = ["mode", "socksPort", "launchAtLogin", "interceptionAtLogin"] as const;
 type SettingKey = (typeof SETTINGS)[number];
 
 const STATE_STYLE = {
@@ -35,7 +29,6 @@ const STATE_STYLE = {
 const SETTING_LABELS: Record<SettingKey, string> = {
   mode: "mode",
   socksPort: "socks port",
-  healthPort: "health port",
   launchAtLogin: "launch at login",
   interceptionAtLogin: "intercept at login",
 };
@@ -43,8 +36,14 @@ const SETTING_LABELS: Record<SettingKey, string> = {
 const PROMPT_LABELS: Record<PromptKind, string> = {
   domain: "add domain",
   socksPort: SETTING_LABELS.socksPort,
-  healthPort: SETTING_LABELS.healthPort,
 };
+
+function logColor(line: string) {
+  if (line.includes("ERROR") || line.includes("WARN")) return theme.error;
+  if (line.includes("endpoint/wireguard")) return theme.ok;
+  if (line.includes("outbound/direct")) return theme.muted;
+  return theme.text;
+}
 
 const HINT_ITEMS: ReadonlyArray<readonly [string, string]> = [
   ["interception.toggle", "intercept"],
@@ -125,19 +124,10 @@ export function App() {
 
   const tunnelLabel = () => {
     if (!vpn.running()) return "daemon stopped";
-    const health = vpn.health();
-    if (!health) return "checking";
-    if (!health.ready) return "connecting";
-    const handshake = vpn.stats()?.lastHandshakeSec;
-    if (!handshake) return "ready";
-    const age = Math.max(0, Math.floor(Date.now() / 1000) - handshake);
-    return `ready · handshake ${age}s ago`;
-  };
-
-  const transferLabel = () => {
-    const stats = vpn.stats();
-    if (!stats) return "";
-    return `rx ${formatBytes(stats.rxBytes)} · tx ${formatBytes(stats.txBytes)}`;
+    const ready = vpn.ready();
+    if (ready === null) return "checking";
+    if (!ready) return "connecting";
+    return "ready";
   };
 
   const activeFile = () => vpn.activeServer()?.file ?? null;
@@ -171,8 +161,6 @@ export function App() {
           : "full (all traffic)";
       case "socksPort":
         return String(config.socksPort);
-      case "healthPort":
-        return String(config.healthPort);
       case "launchAtLogin": {
         const agent = vpn.launchAgent();
         if (!agent.installed) return "off";
@@ -190,7 +178,6 @@ export function App() {
         void vpn.setMode(vpn.config().mode === "split" ? "full" : "split");
         break;
       case "socksPort":
-      case "healthPort":
         if (vpn.intercepting()) return;
         setPrompt({ kind: key, value: String(vpn.config()[key]) });
         break;
@@ -217,10 +204,7 @@ export function App() {
         else void vpn.addDomain(trimmed);
         break;
       case "socksPort":
-        void vpn.setPort("socksPort", trimmed);
-        break;
-      case "healthPort":
-        void vpn.setPort("healthPort", trimmed);
+        void vpn.setSocksPort(trimmed);
         break;
     }
   }
@@ -364,10 +348,6 @@ export function App() {
           <text fg={theme.text}>{vpn.activeServer()?.name ?? "no server"}</text>
           <text fg={theme.muted}>·</text>
           <text fg={theme.text}>{tunnelLabel()}</text>
-          <Show when={transferLabel()}>
-            <text fg={theme.muted}>·</text>
-            <text fg={theme.muted}>{transferLabel()}</text>
-          </Show>
         </box>
       </box>
 
@@ -460,17 +440,7 @@ export function App() {
       >
         <For each={vpn.logLines()}>
           {(line) => (
-            <text
-              fg={
-                line.includes("-> TUNNEL")
-                  ? theme.ok
-                  : line.includes("-> DIRECT")
-                    ? theme.muted
-                    : theme.text
-              }
-              wrapMode="none"
-              truncate
-            >
+            <text fg={logColor(line)} wrapMode="none" truncate>
               {line}
             </text>
           )}

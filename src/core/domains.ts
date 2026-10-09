@@ -21,11 +21,6 @@ export function normalizeDomain(input: string): string | null {
   return HOSTNAME.test(value) ? value : null;
 }
 
-export function domainPattern(domain: string): string {
-  const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return `^(.*\\.)?${escaped}$`;
-}
-
 export function regexError(pattern: string): string | null {
   if (!pattern.trim()) return "pattern is empty";
   try {
@@ -37,14 +32,6 @@ export function regexError(pattern: string): string | null {
     return "lookarounds and backreferences are not supported by the daemon";
   }
   return null;
-}
-
-export function rulePattern(rule: DomainRule): string {
-  return rule.kind === "domain" ? domainPattern(rule.value) : rule.value;
-}
-
-export function enabledPatterns(rules: readonly DomainRule[]): string[] {
-  return rules.filter((rule) => rule.enabled).map(rulePattern);
 }
 
 export function createRule(input: string, kind: RuleKind = "domain"): DomainRule | null {

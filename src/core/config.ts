@@ -6,7 +6,6 @@ export type Mode = "split" | "full";
 
 export type AppConfig = {
   socksPort: number;
-  healthPort: number;
   mode: Mode;
   activeServer: string | null;
   domains: DomainRule[];
@@ -14,7 +13,6 @@ export type AppConfig = {
 
 export const defaultConfig: AppConfig = {
   socksPort: 25344,
-  healthPort: 9080,
   mode: "split",
   activeServer: null,
   domains: [],
@@ -47,7 +45,6 @@ export function sanitizeConfig(input: unknown): AppConfig {
   const raw = input as Record<string, unknown>;
   return {
     socksPort: isPort(raw.socksPort) ? raw.socksPort : defaultConfig.socksPort,
-    healthPort: isPort(raw.healthPort) ? raw.healthPort : defaultConfig.healthPort,
     mode: raw.mode === "full" ? "full" : "split",
     activeServer: typeof raw.activeServer === "string" ? raw.activeServer : null,
     domains: Array.isArray(raw.domains) ? raw.domains.filter(isRule) : [],

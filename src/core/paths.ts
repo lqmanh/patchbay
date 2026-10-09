@@ -32,16 +32,16 @@ export function configFile(): string {
   return join(configDir(), "config.json");
 }
 
-export function wireproxyConfigFile(): string {
-  return join(cacheDir(), "wireproxy.conf");
+export function daemonConfigFile(): string {
+  return join(cacheDir(), "daemon.json");
 }
 
 export function pidFile(): string {
-  return join(runtimeDir(), "wireproxy.pid");
+  return join(runtimeDir(), "daemon.pid");
 }
 
 export function logFile(): string {
-  return join(stateDir(), "wireproxy.log");
+  return join(stateDir(), "daemon.log");
 }
 
 export function proxyStateFile(): string {
