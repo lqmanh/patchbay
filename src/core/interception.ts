@@ -90,15 +90,19 @@ export async function interceptionStatus(
   return { daemon, service, proxy };
 }
 
-export async function enableInterception(options: RunOptions): Promise<void> {
-  let startedManually = false;
+export async function ensureDaemon(options: RunOptions): Promise<boolean> {
   if (isLaunchAgentInstalled()) {
     await writeGeneratedConfig(options);
     await ensureLaunchAgentRunning();
-  } else if ((await daemonStatus()).state !== "running") {
-    await startDaemon(options);
-    startedManually = true;
+    return false;
   }
+  if ((await daemonStatus()).state === "running") return false;
+  await startDaemon(options);
+  return true;
+}
+
+export async function enableInterception(options: RunOptions): Promise<void> {
+  const startedManually = await ensureDaemon(options);
 
   const service = await activeNetworkService();
   if (!service) {

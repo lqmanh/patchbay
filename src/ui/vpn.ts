@@ -11,6 +11,7 @@ import { createRule } from "../core/domains";
 import {
   disableInterception,
   enableInterception,
+  ensureDaemon,
   installInterceptAtLogin,
   installLaunchAtLogin,
   interceptionStatus,
@@ -24,8 +25,9 @@ import { listServers, pickServer, type Server } from "../core/servers";
 import {
   daemonHealth,
   parseMetrics,
-  readLogTail,
+  readLog,
   startDaemon,
+  waitForReachable,
   type Health,
   type RunOptions,
   type TunnelStats,
@@ -36,7 +38,10 @@ import {
   type LaunchdStatus,
 } from "../platform/launchd";
 
-export type Message = { text: string; kind: "info" | "error" };
+const HEALTH_POLL_MS = 60_000;
+const LOG_POLL_MS = 5000;
+const LOG_WINDOW_LINES = 1000;
+const LOG_KEEP_LINES = 2000;
 
 export function formatBytes(value: number | null): string {
   if (value === null) return "—";
@@ -48,10 +53,6 @@ export function formatBytes(value: number | null): string {
     unit++;
   }
   return `${unit > 0 && size < 10 ? size.toFixed(1) : Math.round(size)} ${units[unit]}`;
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export function createVpn() {
@@ -68,25 +69,10 @@ export function createVpn() {
   });
   const [interceptAgent, setInterceptAgent] = createSignal(false);
   const [logLines, setLogLines] = createSignal<string[]>([]);
-  const [message, setMessageRaw] = createSignal<Message | null>(null);
   const [busy, setBusy] = createSignal(false);
 
   let timer: ReturnType<typeof setInterval> | undefined;
-  let messageTimer: ReturnType<typeof setTimeout> | undefined;
-
-  function setMessage(next: Message | null): void {
-    if (messageTimer) {
-      clearTimeout(messageTimer);
-      messageTimer = undefined;
-    }
-    setMessageRaw(next);
-    if (next) {
-      messageTimer = setTimeout(() => {
-        setMessageRaw(null);
-        messageTimer = undefined;
-      }, 4000);
-    }
-  }
+  let logTimer: ReturnType<typeof setInterval> | undefined;
 
   const activeServer = () => pickServer(servers(), config().activeServer);
   const running = () => interception()?.daemon.state === "running";
@@ -98,14 +84,12 @@ export function createVpn() {
 
   async function refresh(): Promise<void> {
     const agent = await launchdStatus();
-    const [serverList, inter, lines] = await Promise.all([
+    const [serverList, inter] = await Promise.all([
       listServers(),
       interceptionStatus(agent),
-      readLogTail(8),
     ]);
     setServers(serverList);
     setInterception(inter);
-    setLogLines(lines);
     setLaunchAgent(agent);
     setInterceptAgent(isInterceptAgentInstalled());
 
@@ -119,17 +103,36 @@ export function createVpn() {
     }
   }
 
+  async function refreshLog(): Promise<void> {
+    setLogLines(await readLog(LOG_WINDOW_LINES, LOG_KEEP_LINES));
+  }
+
+  async function healBrokenInterception(): Promise<boolean> {
+    const inter = interception();
+    if (!inter?.proxy?.enabled || inter.daemon.state === "running") return false;
+    try {
+      await ensureDaemon(requireRunOptions(config(), servers()));
+      await waitForReachable(config().healthPort, 8, 250);
+    } catch {
+      await disableInterception().catch(() => undefined);
+    }
+    return true;
+  }
+
   onMount(() => {
     void (async () => {
       setConfig(await loadConfig());
+      void refreshLog();
       await refresh();
-      timer = setInterval(() => void refresh(), 2000);
+      if (await healBrokenInterception()) await refresh();
+      timer = setInterval(() => void refresh(), HEALTH_POLL_MS);
+      logTimer = setInterval(() => void refreshLog(), LOG_POLL_MS);
     })();
   });
 
   onCleanup(() => {
     if (timer) clearInterval(timer);
-    if (messageTimer) clearTimeout(messageTimer);
+    if (logTimer) clearInterval(logTimer);
   });
 
   async function update(mutate: (draft: AppConfig) => void): Promise<void> {
@@ -139,68 +142,62 @@ export function createVpn() {
     await saveConfig(next);
   }
 
-  function notify(text: string, kind: Message["kind"] = "info"): void {
-    setMessage({ text, kind });
-  }
-
-  async function applyRestart(): Promise<boolean> {
+  async function applyRestart(): Promise<void> {
     const options = runOptions();
-    if (!options) return false;
-    try {
-      await restartService(options);
-      return true;
-    } catch (error) {
-      notify(`restart failed: ${errorText(error)}`, "error");
-      return false;
-    }
+    if (!options) return;
+    await restartService(options).catch(() => undefined);
   }
 
-  async function mutateAndApply(
-    mutate: (draft: AppConfig) => void,
-    message?: string,
-  ): Promise<void> {
+  async function mutateAndApply(mutate: (draft: AppConfig) => void): Promise<void> {
     await update(mutate);
-    if (running() && !(await applyRestart())) {
-      await refresh();
-      return;
-    }
-    if (message) notify(message);
+    if (running()) await applyRestart();
     await refresh();
   }
 
-  async function toggleInterception(): Promise<void> {
+  async function runBusy(task: () => Promise<void>): Promise<void> {
     if (busy()) return;
     setBusy(true);
-    setMessage(null);
     try {
+      await task();
+    } catch {
+      // errors are intentionally silent
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleInterception(): Promise<void> {
+    await runBusy(async () => {
       if (intercepting()) {
         await disableInterception();
-        notify("interception off");
       } else {
         const options = requireRunOptions(config(), servers());
         await update((draft) => {
           draft.activeServer = options.serverFile;
         });
         await enableInterception(options);
-        notify("interception on");
       }
       await refresh();
-    } catch (error) {
-      notify(errorText(error), "error");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function addDomain(input: string): Promise<void> {
     const rule = createRule(input, "domain");
-    if (!rule) {
-      notify(`invalid domain: ${input}`, "error");
-      return;
-    }
+    if (!rule) return;
     await mutateAndApply((draft) => {
       draft.domains.push(rule);
-    }, `added ${rule.value}`);
+    });
+  }
+
+  async function updateRule(id: string, input: string): Promise<void> {
+    const existing = config().domains.find((rule) => rule.id === id);
+    if (!existing) return;
+    const rule = createRule(input, existing.kind);
+    if (!rule) return;
+    await mutateAndApply((draft) => {
+      const target = draft.domains.find((candidate) => candidate.id === id);
+      if (target) target.value = rule.value;
+    });
   }
 
   async function toggleRule(id: string): Promise<void> {
@@ -219,46 +216,33 @@ export function createVpn() {
   async function selectServer(file: string): Promise<void> {
     await mutateAndApply((draft) => {
       draft.activeServer = file;
-    }, `server: ${file}`);
+    });
   }
 
   async function restart(): Promise<void> {
-    if (busy()) return;
-    setBusy(true);
-    if (await applyRestart()) notify("daemon restarted");
-    setBusy(false);
-    await refresh();
+    await runBusy(async () => {
+      await applyRestart();
+      await refresh();
+    });
   }
 
   async function setMode(mode: Mode): Promise<void> {
     await mutateAndApply((draft) => {
       draft.mode = mode;
-    }, `mode: ${mode}`);
+    });
   }
 
   async function setPort(kind: "socksPort" | "healthPort", raw: string): Promise<void> {
-    if (intercepting()) {
-      notify("turn off interception first", "error");
-      return;
-    }
+    if (intercepting()) return;
     const port = Number(raw.trim());
-    if (!isPort(port)) {
-      notify(`invalid port: ${raw}`, "error");
-      return;
-    }
-    await mutateAndApply(
-      (draft) => {
-        draft[kind] = port;
-      },
-      `${kind === "socksPort" ? "socks" : "health"} port: ${port}`,
-    );
+    if (!isPort(port)) return;
+    await mutateAndApply((draft) => {
+      draft[kind] = port;
+    });
   }
 
   async function toggleLaunchAtLogin(): Promise<void> {
-    if (busy()) return;
-    setBusy(true);
-    setMessage(null);
-    try {
+    await runBusy(async () => {
       if (launchAgent().installed) {
         await uninstallLaunchAtLogin();
         if (interceptAgent()) await uninstallInterceptAtLogin();
@@ -266,40 +250,25 @@ export function createVpn() {
           const options = runOptions();
           if (options) await startDaemon(options);
         }
-        notify("launch at login off");
       } else {
         await installLaunchAtLogin(requireRunOptions(config(), servers()));
-        notify("launch at login on");
       }
       await refresh();
-    } catch (error) {
-      notify(errorText(error), "error");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function toggleInterceptAtLogin(): Promise<void> {
-    if (busy()) return;
-    setBusy(true);
-    setMessage(null);
-    try {
+    await runBusy(async () => {
       if (interceptAgent()) {
         await uninstallInterceptAtLogin();
-        notify("intercept at login off");
       } else {
         if (!launchAgent().installed) {
           await installLaunchAtLogin(requireRunOptions(config(), servers()));
         }
         await installInterceptAtLogin();
-        notify("intercept at login on");
       }
       await refresh();
-    } catch (error) {
-      notify(errorText(error), "error");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return {
@@ -311,13 +280,13 @@ export function createVpn() {
     launchAgent,
     interceptAgent,
     logLines,
-    message,
     busy,
     activeServer,
     running,
     intercepting,
     toggleInterception,
     addDomain,
+    updateRule,
     toggleRule,
     removeRule,
     selectServer,
@@ -326,6 +295,5 @@ export function createVpn() {
     setPort,
     toggleLaunchAtLogin,
     toggleInterceptAtLogin,
-    notify,
   };
 }

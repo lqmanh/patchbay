@@ -1,13 +1,21 @@
 /** @jsxImportSource @opentui/solid */
-import { useKeyboard, useRenderer } from "@opentui/solid";
-import { createSignal, For, Show } from "solid-js";
+import type { InputRenderable } from "@opentui/core";
+import { formatKeySequence } from "@opentui/keymap/extras";
+import {
+  reactiveMatcherFromSignal,
+  useBindings,
+  useKeymapSelector,
+} from "@opentui/keymap/solid";
+import { useRenderer } from "@opentui/solid";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import { serversDir } from "../core/paths";
+import { theme } from "./theme";
 import { createVpn, formatBytes } from "./vpn";
 
 type Pane = "servers" | "rules";
 type Screen = "main" | "settings";
 type PromptKind = "domain" | "socksPort" | "healthPort";
-type Prompt = { kind: PromptKind; value: string };
+type Prompt = { kind: PromptKind; value: string; ruleId?: string };
 
 const SETTINGS = [
   "mode",
@@ -19,9 +27,9 @@ const SETTINGS = [
 type SettingKey = (typeof SETTINGS)[number];
 
 const STATE_STYLE = {
-  on: { label: "● intercepted", color: "green" },
-  broken: { label: "! proxy set without daemon", color: "red" },
-  off: { label: "○ direct", color: "#888888" },
+  on: { label: "● intercepted", color: theme.ok },
+  broken: { label: "! proxy set without daemon", color: theme.error },
+  off: { label: "○ direct", color: theme.muted },
 } as const;
 
 const SETTING_LABELS: Record<SettingKey, string> = {
@@ -34,12 +42,65 @@ const SETTING_LABELS: Record<SettingKey, string> = {
 
 const PROMPT_LABELS: Record<PromptKind, string> = {
   domain: "add domain",
-  socksPort: "socks port",
-  healthPort: "health port",
+  socksPort: SETTING_LABELS.socksPort,
+  healthPort: SETTING_LABELS.healthPort,
+};
+
+const HINT_ITEMS: ReadonlyArray<readonly [string, string]> = [
+  ["interception.toggle", "intercept"],
+  ["pane.toggle", "pane"],
+  ["rule.add", "add"],
+  ["rule.edit", "edit"],
+  ["rule.delete", "delete"],
+  ["item.activate", "activate"],
+  ["daemon.restart", "restart"],
+  ["settings.change", "change"],
+  ["screen.settings", "settings"],
+  ["screen.back", "back"],
+  ["app.quit", "quit"],
+];
+
+const PROMPT_HINT_ITEMS: ReadonlyArray<readonly [string, string]> = [
+  ["prompt.submit", "confirm"],
+  ["prompt.cancel", "cancel"],
+];
+
+const HINT_COMMANDS = HINT_ITEMS.map(([name]) => name);
+const PROMPT_HINT_COMMANDS = PROMPT_HINT_ITEMS.map(([name]) => name);
+
+const LIST_SELECT_PROPS = {
+  flexGrow: 1,
+  showDescription: false,
+  backgroundColor: "transparent",
+  textColor: theme.text,
+  focusedBackgroundColor: "transparent",
+  focusedTextColor: theme.text,
+  selectedBackgroundColor: "transparent",
+  selectedTextColor: theme.accent,
+  keyBindings: [
+    { name: "j", action: "move-down" as const },
+    { name: "k", action: "move-up" as const },
+  ],
 };
 
 function clampIndex(index: number, length: number): number {
   return Math.min(Math.max(index, 0), Math.max(length - 1, 0));
+}
+
+type HintSegment = { text: string; muted: boolean };
+
+function HintText(props: { segments: readonly HintSegment[] }) {
+  return (
+    <text>
+      <For each={props.segments}>
+        {(segment) => (
+          <span style={{ fg: segment.muted ? theme.muted : theme.text }}>
+            {segment.text}
+          </span>
+        )}
+      </For>
+    </text>
+  );
 }
 
 export function App() {
@@ -52,6 +113,7 @@ export function App() {
   const [ruleIndex, setRuleIndex] = createSignal(0);
   const [settingIndex, setSettingIndex] = createSignal(0);
   const [prompt, setPrompt] = createSignal<Prompt | null>(null);
+  let promptInput: InputRenderable | undefined;
 
   const stateKind = () => {
     if (vpn.intercepting() && !vpn.running()) return "broken";
@@ -86,12 +148,8 @@ export function App() {
   const selectedRule = () =>
     vpn.config().domains[clampIndex(ruleIndex(), vpn.config().domains.length)] ?? null;
 
-  function move(delta: number) {
-    if (pane() === "servers") {
-      setServerIndex((index) => clampIndex(index + delta, vpn.servers().length));
-    } else {
-      setRuleIndex((index) => clampIndex(index + delta, vpn.config().domains.length));
-    }
+  function moveSetting(delta: number) {
+    setSettingIndex((index) => clampIndex(index + delta, SETTINGS.length));
   }
 
   function activate() {
@@ -133,10 +191,7 @@ export function App() {
         break;
       case "socksPort":
       case "healthPort":
-        if (vpn.intercepting()) {
-          vpn.notify("turn off interception first", "error");
-          return;
-        }
+        if (vpn.intercepting()) return;
         setPrompt({ kind: key, value: String(vpn.config()[key]) });
         break;
       case "launchAtLogin":
@@ -152,136 +207,166 @@ export function App() {
 
   function submitPrompt() {
     const current = prompt();
-    setPrompt(null);
     if (!current) return;
-    const value = current.value.trim();
-    if (!value) return;
+    const trimmed = (promptInput?.value ?? "").trim();
+    setPrompt(null);
+    if (!trimmed) return;
     switch (current.kind) {
       case "domain":
-        void vpn.addDomain(value);
+        if (current.ruleId) void vpn.updateRule(current.ruleId, trimmed);
+        else void vpn.addDomain(trimmed);
         break;
       case "socksPort":
-        void vpn.setPort("socksPort", value);
+        void vpn.setPort("socksPort", trimmed);
         break;
       case "healthPort":
-        void vpn.setPort("healthPort", value);
+        void vpn.setPort("healthPort", trimmed);
         break;
     }
   }
 
-  useKeyboard((key) => {
-    const current = prompt();
-    if (current) {
-      if (key.name === "escape") {
-        setPrompt(null);
-        return;
-      }
-      if (key.name === "return" || key.name === "enter") {
-        submitPrompt();
-        return;
-      }
-      if (key.name === "backspace") {
-        setPrompt({ ...current, value: current.value.slice(0, -1) });
-        return;
-      }
-      if (!key.ctrl && !key.meta && key.sequence && key.sequence.length === 1) {
-        setPrompt({ ...current, value: current.value + key.sequence });
-      }
-      return;
-    }
-
-    if (screen() === "settings") {
-      switch (key.name) {
-        case "q":
-          renderer.destroy();
-          break;
-        case "s":
-        case "escape":
-          setScreen("main");
-          break;
-        case "j":
-        case "down":
-          setSettingIndex((index) => Math.min(index + 1, SETTINGS.length - 1));
-          break;
-        case "k":
-        case "up":
-          setSettingIndex((index) => Math.max(index - 1, 0));
-          break;
-        case "return":
-        case "enter":
-          activateSetting();
-          break;
-      }
-      return;
-    }
-
-    switch (key.name) {
-      case "q":
-        renderer.destroy();
-        break;
-      case "s":
-        setScreen("settings");
-        break;
-      case "tab":
-        setPane((current) => (current === "servers" ? "rules" : "servers"));
-        break;
-      case "j":
-      case "down":
-        move(1);
-        break;
-      case "k":
-      case "up":
-        move(-1);
-        break;
-      case "space":
-      case "t":
-        void vpn.toggleInterception();
-        break;
-      case "a":
-        setPrompt({ kind: "domain", value: "" });
-        break;
-      case "d": {
+  const commands = [
+    { name: "app.quit", run: () => renderer.destroy() },
+    { name: "screen.settings", run: () => setScreen("settings") },
+    { name: "screen.back", run: () => setScreen("main") },
+    { name: "settings.change", run: activateSetting },
+    {
+      name: "pane.toggle",
+      run: () => setPane((current) => (current === "servers" ? "rules" : "servers")),
+    },
+    { name: "settings.down", run: () => moveSetting(1) },
+    { name: "settings.up", run: () => moveSetting(-1) },
+    { name: "interception.toggle", run: () => void vpn.toggleInterception() },
+    { name: "rule.add", run: () => setPrompt({ kind: "domain", value: "" }) },
+    {
+      name: "rule.edit",
+      run: () => {
         const rule = selectedRule();
-        if (pane() === "rules" && rule) void vpn.removeRule(rule.id);
-        break;
+        if (rule) setPrompt({ kind: "domain", value: rule.value, ruleId: rule.id });
+      },
+    },
+    {
+      name: "rule.delete",
+      run: () => {
+        const rule = selectedRule();
+        if (rule) void vpn.removeRule(rule.id);
+      },
+    },
+    { name: "item.activate", run: activate },
+    { name: "daemon.restart", run: () => void vpn.restart() },
+  ];
+
+  const when = (predicate: () => boolean) =>
+    reactiveMatcherFromSignal(createMemo(predicate));
+
+  const promptClosed = when(() => prompt() === null);
+  const mainActive = when(() => prompt() === null && screen() === "main");
+  const rulesActive = when(
+    () => prompt() === null && screen() === "main" && pane() === "rules",
+  );
+  const settingsActive = when(() => prompt() === null && screen() === "settings");
+  const promptActive = when(() => prompt() !== null);
+
+  useBindings(() => ({ commands }));
+
+  useBindings(() => ({
+    enabled: promptClosed,
+    bindings: [{ key: "q", cmd: "app.quit" }],
+  }));
+
+  useBindings(() => ({
+    enabled: mainActive,
+    bindings: [
+      { key: "s", cmd: "screen.settings" },
+      { key: "tab", cmd: "pane.toggle" },
+      { key: "space, t", cmd: "interception.toggle" },
+      { key: "a", cmd: "rule.add" },
+      { key: "return, enter", cmd: "item.activate" },
+      { key: "r", cmd: "daemon.restart" },
+    ],
+  }));
+
+  useBindings(() => ({
+    enabled: rulesActive,
+    bindings: [
+      { key: "e", cmd: "rule.edit" },
+      { key: "d", cmd: "rule.delete" },
+    ],
+  }));
+
+  useBindings(() => ({
+    enabled: settingsActive,
+    bindings: [
+      { key: "s", cmd: "screen.back" },
+      { key: "escape", cmd: "screen.back" },
+      { key: "j, down", cmd: "settings.down" },
+      { key: "k, up", cmd: "settings.up" },
+      { key: "return, enter", cmd: "settings.change" },
+    ],
+  }));
+
+  useBindings(() => ({
+    enabled: promptActive,
+    commands: [
+      { name: "prompt.submit", run: () => submitPrompt() },
+      { name: "prompt.cancel", run: () => setPrompt(null) },
+    ],
+    bindings: [
+      { key: "return, enter", cmd: "prompt.submit" },
+      { key: "escape", cmd: "prompt.cancel" },
+    ],
+  }));
+
+  const hintSegments = useKeymapSelector((keymap) => {
+    const build = (
+      items: ReadonlyArray<readonly [string, string]>,
+      commands: readonly string[],
+    ) => {
+      const bindings = keymap.getCommandBindings({ visibility: "active", commands });
+      const segments: HintSegment[] = [];
+      for (const [name, label] of items) {
+        const binding = bindings.get(name)?.[0];
+        if (!binding) continue;
+        if (segments.length > 0) segments.push({ text: " · ", muted: true });
+        segments.push({
+          text: formatKeySequence(binding.sequence, {
+            keyNameAliases: { return: "enter" },
+          }),
+          muted: false,
+        });
+        segments.push({ text: ` ${label}`, muted: true });
       }
-      case "return":
-      case "enter":
-        activate();
-        break;
-      case "r":
-        void vpn.restart();
-        break;
-    }
+      return segments;
+    };
+    return {
+      main: build(HINT_ITEMS, HINT_COMMANDS),
+      prompt: build(PROMPT_HINT_ITEMS, PROMPT_HINT_COMMANDS),
+    };
   });
-
-  const hints = () => {
-    if (screen() === "settings") return "enter change · s or esc back · q quit";
-    return "space intercept · tab pane · a add · d delete · enter activate · r restart · s settings · q quit";
-  };
-
-  const messageColor = () => {
-    const message = vpn.message();
-    return message?.kind === "error" ? "red" : "green";
-  };
 
   const promptLabel = () => {
     const current = prompt();
-    return current ? PROMPT_LABELS[current.kind] : "";
+    if (!current) return "";
+    return current.ruleId ? "edit domain" : PROMPT_LABELS[current.kind];
   };
 
   return (
     <box flexDirection="column" width="100%" height="100%">
-      <box borderStyle="rounded" borderColor="#666666" title="patchbay" paddingLeft={1}>
+      <box
+        borderStyle="rounded"
+        borderColor={theme.muted}
+        title="patchbay"
+        paddingLeft={1}
+      >
         <box flexDirection="row" gap={1}>
           <text fg={stateStyle().color}>{stateStyle().label}</text>
-          <text fg="#666666">·</text>
-          <text>{vpn.activeServer()?.name ?? "no server"}</text>
-          <text fg="#666666">·</text>
-          <text>{tunnelLabel()}</text>
+          <text fg={theme.muted}>·</text>
+          <text fg={theme.text}>{vpn.activeServer()?.name ?? "no server"}</text>
+          <text fg={theme.muted}>·</text>
+          <text fg={theme.text}>{tunnelLabel()}</text>
           <Show when={transferLabel()}>
-            <text fg="#666666">·</text>
-            <text fg="#888888">{transferLabel()}</text>
+            <text fg={theme.muted}>·</text>
+            <text fg={theme.muted}>{transferLabel()}</text>
           </Show>
         </box>
       </box>
@@ -292,14 +377,13 @@ export function App() {
           <box
             flexGrow={1}
             borderStyle="rounded"
-            borderColor="cyan"
+            borderColor={theme.accent}
             title="settings"
             paddingLeft={1}
-            marginTop={1}
           >
             <For each={SETTINGS}>
               {(key, index) => (
-                <text fg={index() === settingIndex() ? "cyan" : undefined}>
+                <text fg={index() === settingIndex() ? theme.accent : theme.text}>
                   {index() === settingIndex() ? "> " : "  "}
                   {SETTING_LABELS[key]}: {settingValue(key)}
                 </text>
@@ -308,81 +392,81 @@ export function App() {
           </box>
         }
       >
-        <box flexGrow={1} flexDirection="row" gap={1} marginTop={1}>
+        <box flexGrow={1} flexDirection="row">
           <box
             flexGrow={1}
             borderStyle="rounded"
-            borderColor={pane() === "servers" ? "cyan" : "#666666"}
+            borderColor={pane() === "servers" ? theme.accent : theme.muted}
             title="servers"
             paddingLeft={1}
+            onMouseDown={() => setPane("servers")}
           >
             <Show
               when={vpn.servers().length > 0}
-              fallback={<text fg="#666666">none in {serversDir()}</text>}
+              fallback={<text fg={theme.muted}>none in {serversDir()}</text>}
             >
-              <For each={vpn.servers()}>
-                {(server, index) => (
-                  <text
-                    fg={
-                      index() === serverIndex() && pane() === "servers"
-                        ? "cyan"
-                        : undefined
-                    }
-                  >
-                    {index() === serverIndex() ? "> " : "  "}
-                    {server.name}
-                    {server.file === activeFile() ? "  (active)" : ""}
-                  </text>
-                )}
-              </For>
+              <select
+                {...LIST_SELECT_PROPS}
+                options={vpn.servers().map((server) => ({
+                  name: `${server.name}${server.file === activeFile() ? "  (active)" : ""}`,
+                  description: "",
+                  value: server.file,
+                }))}
+                focused={pane() === "servers" && prompt() === null}
+                onChange={setServerIndex}
+              />
             </Show>
           </box>
 
           <box
             flexGrow={1}
             borderStyle="rounded"
-            borderColor={pane() === "rules" ? "cyan" : "#666666"}
+            borderColor={pane() === "rules" ? theme.accent : theme.muted}
             title="domain rules"
             paddingLeft={1}
+            onMouseDown={() => setPane("rules")}
           >
             <Show
               when={vpn.config().domains.length > 0}
-              fallback={<text fg="#666666">none — press a to add</text>}
+              fallback={<text fg={theme.muted}>none — press a to add</text>}
             >
-              <For each={vpn.config().domains}>
-                {(rule, index) => (
-                  <text
-                    fg={
-                      index() === ruleIndex() && pane() === "rules" ? "cyan" : undefined
-                    }
-                  >
-                    {index() === ruleIndex() ? "> " : "  "}
-                    {rule.enabled ? "[x]" : "[ ]"} {rule.value}
-                  </text>
-                )}
-              </For>
+              <select
+                {...LIST_SELECT_PROPS}
+                options={vpn.config().domains.map((rule) => ({
+                  name: `${rule.enabled ? "[x]" : "[ ]"} ${rule.value}`,
+                  description: "",
+                  value: rule.id,
+                }))}
+                focused={pane() === "rules" && prompt() === null}
+                onChange={setRuleIndex}
+              />
             </Show>
           </box>
         </box>
       </Show>
 
-      <box
+      <scrollbox
         borderStyle="rounded"
-        borderColor="#666666"
+        borderColor={theme.muted}
+        focusedBorderColor={theme.muted}
         title="log"
         paddingLeft={1}
-        marginTop={1}
-        height={9}
+        height={12}
+        stickyScroll={true}
+        stickyStart="bottom"
+        verticalScrollbarOptions={{
+          trackOptions: { foregroundColor: theme.muted, backgroundColor: "transparent" },
+        }}
       >
         <For each={vpn.logLines()}>
           {(line) => (
             <text
               fg={
                 line.includes("-> TUNNEL")
-                  ? "green"
+                  ? theme.ok
                   : line.includes("-> DIRECT")
-                    ? "#888888"
-                    : undefined
+                    ? theme.muted
+                    : theme.text
               }
               wrapMode="none"
               truncate
@@ -391,21 +475,51 @@ export function App() {
             </text>
           )}
         </For>
-      </box>
+      </scrollbox>
 
-      <Show when={prompt() !== null}>
-        <text fg="cyan">
-          {promptLabel()}: {prompt()?.value}█
-        </text>
-      </Show>
-      <Show when={vpn.message()}>
-        <text fg={messageColor()}>{vpn.message()?.text}</text>
-      </Show>
       <Show when={vpn.busy()}>
-        <text fg="#888888">working...</text>
+        <text fg={theme.muted}>working...</text>
       </Show>
       <Show when={!vpn.busy()}>
-        <text fg="#666666">{hints()}</text>
+        <HintText segments={hintSegments().main} />
+      </Show>
+
+      <Show when={prompt() !== null}>
+        <box
+          position="absolute"
+          left={0}
+          top={0}
+          width="100%"
+          height="100%"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <box
+            borderStyle="rounded"
+            borderColor={theme.accent}
+            title={promptLabel()}
+            backgroundColor={theme.surface}
+            width="70%"
+            paddingLeft={1}
+            paddingRight={1}
+          >
+            <input
+              ref={(el) => {
+                promptInput = el;
+                el.value = prompt()?.value ?? "";
+                el.focus();
+              }}
+              flexGrow={1}
+              textColor={theme.text}
+              focusedTextColor={theme.text}
+              cursorColor={theme.text}
+              onSubmit={() => submitPrompt()}
+            />
+            <box flexDirection="row" justifyContent="center">
+              <HintText segments={hintSegments().prompt} />
+            </box>
+          </box>
+        </box>
       </Show>
     </box>
   );

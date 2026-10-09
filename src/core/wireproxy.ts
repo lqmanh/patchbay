@@ -195,20 +195,15 @@ export async function waitForReachable(
   return false;
 }
 
-const LOG_TAIL_BYTES = 16 * 1024;
-
-export async function readLogTail(count: number): Promise<string[]> {
+export async function readLog(windowLines: number, keepLines: number): Promise<string[]> {
   try {
     const file = Bun.file(logFile());
-    const size = file.size;
-    if (size === 0) return [];
+    if (file.size === 0) return [];
 
-    const start = Math.max(0, size - LOG_TAIL_BYTES);
-    const lines = (await file.slice(start).text())
-      .split("\n")
-      .filter((line) => line.length > 0);
-    if (start > 0 && lines.length > 0) lines.shift();
-    return lines.slice(-count);
+    const lines = (await file.text()).split("\n").filter((line) => line.length > 0);
+    const kept = lines.slice(-keepLines);
+    if (kept.length < lines.length) await Bun.write(logFile(), `${kept.join("\n")}\n`);
+    return kept.slice(-windowLines);
   } catch {
     return [];
   }

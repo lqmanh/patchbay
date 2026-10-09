@@ -10,6 +10,13 @@ import {
 } from "../src/core/wireproxy";
 import { activeNetworkService, getSocksProxy } from "../src/platform/macos";
 
+const failures: string[] = [];
+
+function check(label: string, ok: boolean): void {
+  console.log(ok ? `ok: ${label}` : `FAIL: ${label}`);
+  if (!ok) failures.push(label);
+}
+
 const binary = resolveWireproxyBinary();
 console.log("wireproxy:", binary ?? "NOT FOUND");
 
@@ -36,67 +43,77 @@ if (service) {
 
 await stopDaemon();
 const proxy = `socks5h://127.0.0.1:${defaultConfig.socksPort}`;
-const pid = await startDaemon({
-  serverFile: server.file,
-  socksPort: defaultConfig.socksPort,
-  healthPort: defaultConfig.healthPort,
-  mode: "split",
-  domains: [
-    { id: "smoke1", value: "reddit.com", kind: "domain", enabled: true },
-    { id: "smoke2", value: "medium.com", kind: "domain", enabled: true },
-  ],
-});
-console.log("started daemon, pid", pid);
+try {
+  const pid = await startDaemon({
+    serverFile: server.file,
+    socksPort: defaultConfig.socksPort,
+    healthPort: defaultConfig.healthPort,
+    mode: "split",
+    domains: [
+      { id: "smoke1", value: "reddit.com", kind: "domain", enabled: true },
+      { id: "smoke2", value: "medium.com", kind: "domain", enabled: true },
+    ],
+  });
+  console.log("started daemon, pid", pid);
+  check("daemon reports running", (await daemonStatus()).state === "running");
 
-await waitForReachable(defaultConfig.healthPort, 50, 200);
-const health = await daemonHealth(defaultConfig.healthPort);
-console.log("health:", JSON.stringify(health.metrics?.slice(0, 200)));
+  const reachable = await waitForReachable(defaultConfig.healthPort, 50, 200);
+  const health = await daemonHealth(defaultConfig.healthPort);
+  console.log("health:", JSON.stringify(health.metrics?.slice(0, 200)));
+  check("health endpoint reachable", reachable && health.reachable);
 
-const curl = Bun.spawnSync([
-  "curl",
-  "-s",
-  "-o",
-  "/dev/null",
-  "-w",
-  "%{http_code}",
-  "--proxy",
-  proxy,
-  "--max-time",
-  "20",
-  "https://www.reddit.com",
-]);
-console.log(
-  "reddit via proxy:",
-  curl.stdout.toString() || `curl exited ${curl.exitCode}`,
-);
+  const curl = Bun.spawnSync([
+    "curl",
+    "-s",
+    "-o",
+    "/dev/null",
+    "-w",
+    "%{http_code}",
+    "--proxy",
+    proxy,
+    "--max-time",
+    "20",
+    "https://www.reddit.com",
+  ]);
+  const redditCode = curl.stdout.toString();
+  console.log("reddit via proxy:", redditCode || `curl exited ${curl.exitCode}`);
+  check("reddit 2xx via proxy", /^2\d\d$/.test(redditCode));
 
-const exitProxy = Bun.spawnSync([
-  "curl",
-  "-s",
-  "--max-time",
-  "10",
-  "--proxy",
-  proxy,
-  "https://ipinfo.io/ip",
-]);
-const exitDirect = Bun.spawnSync([
-  "curl",
-  "-s",
-  "--max-time",
-  "10",
-  "https://ipinfo.io/ip",
-]);
-console.log(
-  "exit via proxy (unmatched, expect direct):",
-  exitProxy.stdout.toString().trim(),
-);
-console.log("exit direct:", exitDirect.stdout.toString().trim());
+  const exitProxy = Bun.spawnSync([
+    "curl",
+    "-s",
+    "--max-time",
+    "10",
+    "--proxy",
+    proxy,
+    "https://ipinfo.io/ip",
+  ]);
+  const exitDirect = Bun.spawnSync([
+    "curl",
+    "-s",
+    "--max-time",
+    "10",
+    "https://ipinfo.io/ip",
+  ]);
+  const exitIp = exitProxy.stdout.toString().trim();
+  const directIp = exitDirect.stdout.toString().trim();
+  console.log("exit via proxy (unmatched, expect direct):", exitIp);
+  console.log("exit direct:", directIp);
+  check("unmatched traffic exits direct", exitIp.length > 0 && exitIp === directIp);
 
-console.log("status:", JSON.stringify(await daemonStatus()));
+  console.log("status:", JSON.stringify(await daemonStatus()));
+} finally {
+  if (process.env.SMOKE_KEEP) {
+    console.log("SMOKE_KEEP set, leaving daemon running");
+  } else {
+    await stopDaemon();
+    console.log("stopped:", JSON.stringify(await daemonStatus()));
+  }
+}
 
-if (process.env.SMOKE_KEEP) {
-  console.log("SMOKE_KEEP set, leaving daemon running");
+if (failures.length > 0) {
+  console.error(`smoke failed: ${failures.join(", ")}`);
+  process.exitCode = 1;
 } else {
-  await stopDaemon();
-  console.log("stopped:", JSON.stringify(await daemonStatus()));
+  console.log("smoke passed");
 }

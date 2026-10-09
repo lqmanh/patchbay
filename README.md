@@ -24,7 +24,7 @@ bun run build      # compile a standalone binary to dist/patchbay
 
 - `space` — toggle interception (daemon + system SOCKS proxy; previous proxy state is restored on disable)
 - `tab` — switch pane; `j`/`k` or arrows move; `enter` selects a server or toggles a rule
-- `a` — add a domain rule; `d` — delete the selected rule
+- `a` — add a domain rule; `e` — edit the selected rule; `d` — delete the selected rule
 - `s` — settings: mode (split/full), ports, launch at login, intercept at login (auto-enables the system proxy when you log in)
 - `r` — restart the daemon; `q` — quit
 
@@ -32,8 +32,12 @@ Only domains matching a rule are routed through the VPN; everything else is dial
 
 Another VPN app (including the MEGA desktop client) must be disconnected while patchbay intercepts: its tunnel becomes the default route, macOS replaces the global proxy state that apps read, and enabling interception fails with "no active network service".
 
-## Layout
+### Firefox-based browsers
 
-- `~/.config/patchbay/` — settings and server credentials (`servers/*.conf`)
-- `~/.cache/patchbay/` — generated wireproxy config
-- `~/.local/state/patchbay/` — PID, logs, previous proxy state
+Firefox, Zen and other Firefox-based browsers parse the macOS system SOCKS proxy as **SOCKS v4** by default, while wireproxy only speaks SOCKS v5 — with interception on, every page fails. Chrome and Safari assume v5 and need no setup.
+
+In the browser's `about:config`, set (applies immediately, no restart):
+
+- `network.proxy.default_pac_script_socks_version` → `5`
+
+Keep the browser's proxy setting on "Use system proxy settings" (the default); "No proxy" and "Auto-detect proxy settings" bypass patchbay entirely. This path also resolves DNS at the proxy, which is what allows domain rules to match.

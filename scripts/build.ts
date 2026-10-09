@@ -13,10 +13,12 @@ async function removeTempBuilds(): Promise<void> {
   );
 }
 
+const root = `${import.meta.dir}/..`;
+
 const result = await Bun.build({
-  entrypoints: ["./src/index.tsx"],
+  entrypoints: [`${root}/src/index.tsx`],
   target: "bun",
-  outdir: "./dist",
+  outdir: `${root}/dist`,
   plugins: [solidPlugin],
   compile: {
     target,
@@ -25,13 +27,13 @@ const result = await Bun.build({
     // doesn't exist at runtime and breaks startup.
     autoloadBunfig: false,
   },
-});
-
-await removeTempBuilds();
+}).finally(removeTempBuilds);
 
 if (!result.success) {
   for (const log of result.logs) console.error(log);
   process.exit(1);
 }
 
-console.log(`built dist/patchbay for ${target}`);
+console.log(
+  `built ${result.outputs.map((output) => output.path).join(", ")} for ${target}`,
+);
