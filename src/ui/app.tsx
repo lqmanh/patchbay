@@ -426,6 +426,7 @@ export function App() {
       </Show>
 
       <scrollbox
+        ref={(el) => (el.content.maxWidth = undefined)}
         borderStyle="rounded"
         borderColor={theme.muted}
         focusedBorderColor={theme.muted}
@@ -435,12 +436,15 @@ export function App() {
         stickyScroll={true}
         stickyStart="bottom"
         verticalScrollbarOptions={{
-          trackOptions: { foregroundColor: theme.muted, backgroundColor: "transparent" },
+          visible: false,
+        }}
+        horizontalScrollbarOptions={{
+          visible: false,
         }}
       >
         <For each={vpn.logLines()}>
           {(line) => (
-            <text fg={logColor(line)} wrapMode="none" truncate>
+            <text fg={logColor(line)} wrapMode="none" width={line.length}>
               {line}
             </text>
           )}
