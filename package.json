@@ -15,7 +15,8 @@
     "lint": "oxlint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "tsc --noEmit && oxlint && prettier --check ."
+    "check": "tsc --noEmit && oxlint && prettier --check .",
+    "prepare": "husky"
   },
   "dependencies": {
     "@opentui/core": "^0.5.17",
@@ -24,7 +25,10 @@
     "solid-js": "1.9.12"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
     "@types/bun": "^1.4.2",
+    "husky": "^9.1.7",
     "oxlint": "^1.87.0",
     "prettier": "^3.9.9",
     "typescript": "^7.0.2"
