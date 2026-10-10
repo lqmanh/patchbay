@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import type { InputRenderable } from "@opentui/core";
+import { SelectRenderable, type InputRenderable, type MouseEvent } from "@opentui/core";
 import { formatKeySequence } from "@opentui/keymap/extras";
 import {
   reactiveMatcherFromSignal,
@@ -9,40 +9,51 @@ import {
 import { useRenderer } from "@opentui/solid";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { serversDir } from "../core/paths";
-import { theme } from "./theme";
+import { Dialog } from "./dialog";
+import { createTheme, THEME_NAMES, type Palette } from "./theme";
 import { createVpn } from "./vpn";
 
 type Pane = "servers" | "rules";
 type Screen = "main" | "settings";
 type PromptKind = "domain" | "socksPort";
 type Prompt = { kind: PromptKind; value: string; ruleId?: string };
+type StateKind = "on" | "broken" | "off";
 
-const SETTINGS = ["mode", "socksPort", "launchAtLogin", "interceptionAtLogin"] as const;
+const SETTINGS = [
+  "mode",
+  "socksPort",
+  "launchAtLogin",
+  "interceptionAtLogin",
+  "theme",
+] as const;
 type SettingKey = (typeof SETTINGS)[number];
 
-const STATE_STYLE = {
-  on: { label: "● intercepted", color: theme.ok },
-  broken: { label: "! proxy set without daemon", color: theme.error },
-  off: { label: "○ direct", color: theme.muted },
-} as const;
+function stateStyle(palette: Palette, kind: StateKind) {
+  if (kind === "on") return { label: "● intercepted", color: palette.success };
+  if (kind === "broken") {
+    return { label: "! proxy set without daemon", color: palette.error };
+  }
+  return { label: "○ direct", color: palette.textMuted };
+}
 
 const SETTING_LABELS: Record<SettingKey, string> = {
   mode: "mode",
   socksPort: "socks port",
   launchAtLogin: "launch at login",
   interceptionAtLogin: "intercept at login",
+  theme: "theme",
 };
 
 const PROMPT_LABELS: Record<PromptKind, string> = {
-  domain: "add domain",
-  socksPort: SETTING_LABELS.socksPort,
+  domain: "ADD DOMAIN",
+  socksPort: "SOCKS PORT",
 };
 
-function logColor(line: string) {
-  if (line.includes("ERROR") || line.includes("WARN")) return theme.error;
-  if (line.includes("endpoint/wireguard")) return theme.ok;
-  if (line.includes("outbound/direct")) return theme.muted;
-  return theme.text;
+function logColor(line: string, palette: Palette) {
+  if (line.includes("ERROR") || line.includes("WARN")) return palette.error;
+  if (line.includes("endpoint/wireguard")) return palette.success;
+  if (line.includes("outbound/direct")) return palette.textMuted;
+  return palette.text;
 }
 
 const HINT_ITEMS: ReadonlyArray<readonly [string, string]> = [
@@ -64,23 +75,74 @@ const PROMPT_HINT_ITEMS: ReadonlyArray<readonly [string, string]> = [
   ["prompt.cancel", "cancel"],
 ];
 
-const HINT_COMMANDS = HINT_ITEMS.map(([name]) => name);
-const PROMPT_HINT_COMMANDS = PROMPT_HINT_ITEMS.map(([name]) => name);
+const PICKER_HINT_ITEMS: ReadonlyArray<readonly [string, string]> = [
+  ["theme.confirm", "apply"],
+  ["theme.cancel", "cancel"],
+];
 
-const LIST_SELECT_PROPS = {
-  flexGrow: 1,
-  showDescription: false,
-  backgroundColor: "transparent",
-  textColor: theme.text,
-  focusedBackgroundColor: "transparent",
-  focusedTextColor: theme.text,
-  selectedBackgroundColor: "transparent",
-  selectedTextColor: theme.accent,
-  keyBindings: [
-    { name: "j", action: "move-down" as const },
-    { name: "k", action: "move-up" as const },
-  ],
+type SelectViewport = Omit<
+  SelectRenderable,
+  "scrollOffset" | "maxVisibleItems" | "linesPerItem"
+> & {
+  scrollOffset: number;
+  maxVisibleItems: number;
+  linesPerItem: number;
 };
+
+// scrollOffset/maxVisibleItems/linesPerItem are private in the SelectRenderable
+// types but plain fields at runtime; the viewport cannot be scrolled otherwise.
+function selectViewport(target: unknown): SelectViewport | null {
+  return target instanceof SelectRenderable
+    ? (target as unknown as SelectViewport)
+    : null;
+}
+
+function wheelSelect(event: MouseEvent) {
+  const select = selectViewport(event.target);
+  if (!select) return;
+  const direction = event.scroll?.direction;
+  if (direction !== "up" && direction !== "down") return;
+  const step = Math.max(1, Math.round(event.scroll?.delta ?? 1));
+  const max = Math.max(0, select.options.length - select.maxVisibleItems);
+  const next = clampIndex(
+    select.scrollOffset + (direction === "down" ? step : -step),
+    max + 1,
+  );
+  if (next === select.scrollOffset) return;
+  select.scrollOffset = next;
+  select.requestRender();
+}
+
+function clickSelect(event: MouseEvent) {
+  const select = selectViewport(event.target);
+  if (!select) return;
+  const row =
+    Math.floor((event.y - select.y) / select.linesPerItem) + select.scrollOffset;
+  if (row < 0 || row >= select.options.length) return;
+  select.setSelectedIndex(row);
+}
+
+const SELECT_KEY_BINDINGS = [
+  { name: "j", action: "move-down" as const },
+  { name: "k", action: "move-up" as const },
+];
+
+function listSelectProps(palette: Palette) {
+  return {
+    flexGrow: 1,
+    showDescription: false,
+    wrapSelection: true,
+    onMouseDown: clickSelect,
+    onMouseScroll: wheelSelect,
+    backgroundColor: "transparent",
+    textColor: palette.text,
+    focusedBackgroundColor: "transparent",
+    focusedTextColor: palette.text,
+    selectedBackgroundColor: "transparent",
+    selectedTextColor: palette.primary,
+    keyBindings: SELECT_KEY_BINDINGS,
+  };
+}
 
 function clampIndex(index: number, length: number): number {
   return Math.min(Math.max(index, 0), Math.max(length - 1, 0));
@@ -88,12 +150,14 @@ function clampIndex(index: number, length: number): number {
 
 type HintSegment = { text: string; muted: boolean };
 
-function HintText(props: { segments: readonly HintSegment[] }) {
+function HintText(props: { segments: readonly HintSegment[]; palette: Palette }) {
   return (
     <text>
       <For each={props.segments}>
         {(segment) => (
-          <span style={{ fg: segment.muted ? theme.muted : theme.text }}>
+          <span
+            style={{ fg: segment.muted ? props.palette.textMuted : props.palette.text }}
+          >
             {segment.text}
           </span>
         )}
@@ -105,6 +169,7 @@ function HintText(props: { segments: readonly HintSegment[] }) {
 export function App() {
   const renderer = useRenderer();
   const vpn = createVpn();
+  const theme = createTheme(vpn, renderer);
 
   const [pane, setPane] = createSignal<Pane>("servers");
   const [screen, setScreen] = createSignal<Screen>("main");
@@ -112,15 +177,16 @@ export function App() {
   const [ruleIndex, setRuleIndex] = createSignal(0);
   const [settingIndex, setSettingIndex] = createSignal(0);
   const [prompt, setPrompt] = createSignal<Prompt | null>(null);
+  const [pickerIndex, setPickerIndex] = createSignal<number | null>(null);
   let promptInput: InputRenderable | undefined;
 
-  const stateKind = () => {
+  const stateKind = (): StateKind => {
     if (vpn.intercepting() && !vpn.running()) return "broken";
     if (vpn.intercepting()) return "on";
     return "off";
   };
 
-  const stateStyle = () => STATE_STYLE[stateKind()];
+  const currentState = createMemo(() => stateStyle(theme.palette(), stateKind()));
 
   const tunnelLabel = () => {
     if (!vpn.running()) return "daemon stopped";
@@ -139,7 +205,7 @@ export function App() {
     vpn.config().domains[clampIndex(ruleIndex(), vpn.config().domains.length)] ?? null;
 
   function moveSetting(delta: number) {
-    setSettingIndex((index) => clampIndex(index + delta, SETTINGS.length));
+    setSettingIndex((index) => (index + delta + SETTINGS.length) % SETTINGS.length);
   }
 
   function activate() {
@@ -150,6 +216,28 @@ export function App() {
     }
     const rule = selectedRule();
     if (rule) void vpn.toggleRule(rule.id);
+  }
+
+  function openPicker() {
+    setPickerIndex(THEME_NAMES.indexOf(theme.active()));
+  }
+
+  function movePicker(index: number) {
+    setPickerIndex(index);
+    const name = THEME_NAMES[index];
+    if (name) theme.preview(name);
+  }
+
+  function applyPicker() {
+    const index = pickerIndex();
+    const name = index === null ? undefined : THEME_NAMES[index];
+    if (name) void theme.setActive(name);
+    cancelPicker();
+  }
+
+  function cancelPicker() {
+    theme.clearPreview();
+    setPickerIndex(null);
   }
 
   const settingValue = (key: SettingKey): string => {
@@ -168,6 +256,8 @@ export function App() {
       }
       case "interceptionAtLogin":
         return vpn.interceptAgent() ? "on · enables the system proxy at login" : "off";
+      case "theme":
+        return theme.active();
     }
   };
 
@@ -186,6 +276,9 @@ export function App() {
         break;
       case "interceptionAtLogin":
         void vpn.toggleInterceptAtLogin();
+        break;
+      case "theme":
+        openPicker();
         break;
       default:
         break;
@@ -238,23 +331,31 @@ export function App() {
     },
     { name: "item.activate", run: activate },
     { name: "daemon.restart", run: () => void vpn.restart() },
+    { name: "theme.confirm", run: applyPicker },
+    {
+      name: "theme.cancel",
+      run: cancelPicker,
+    },
   ];
 
   const when = (predicate: () => boolean) =>
     reactiveMatcherFromSignal(createMemo(predicate));
 
-  const promptClosed = when(() => prompt() === null);
-  const mainActive = when(() => prompt() === null && screen() === "main");
+  const overlayOpen = createMemo(() => prompt() !== null || pickerIndex() !== null);
+
+  const overlayClosed = when(() => !overlayOpen());
+  const mainActive = when(() => !overlayOpen() && screen() === "main");
   const rulesActive = when(
-    () => prompt() === null && screen() === "main" && pane() === "rules",
+    () => !overlayOpen() && screen() === "main" && pane() === "rules",
   );
-  const settingsActive = when(() => prompt() === null && screen() === "settings");
+  const settingsActive = when(() => !overlayOpen() && screen() === "settings");
   const promptActive = when(() => prompt() !== null);
+  const pickerActive = when(() => pickerIndex() !== null);
 
   useBindings(() => ({ commands }));
 
   useBindings(() => ({
-    enabled: promptClosed,
+    enabled: overlayClosed,
     bindings: [{ key: "q", cmd: "app.quit" }],
   }));
 
@@ -293,7 +394,12 @@ export function App() {
     enabled: promptActive,
     commands: [
       { name: "prompt.submit", run: () => submitPrompt() },
-      { name: "prompt.cancel", run: () => setPrompt(null) },
+      {
+        name: "prompt.cancel",
+        run: () => {
+          setPrompt(null);
+        },
+      },
     ],
     bindings: [
       { key: "return, enter", cmd: "prompt.submit" },
@@ -301,11 +407,17 @@ export function App() {
     ],
   }));
 
+  useBindings(() => ({
+    enabled: pickerActive,
+    bindings: [
+      { key: "return, enter", cmd: "theme.confirm" },
+      { key: "escape", cmd: "theme.cancel" },
+    ],
+  }));
+
   const hintSegments = useKeymapSelector((keymap) => {
-    const build = (
-      items: ReadonlyArray<readonly [string, string]>,
-      commands: readonly string[],
-    ) => {
+    const build = (items: ReadonlyArray<readonly [string, string]>) => {
+      const commands = items.map(([name]) => name);
       const bindings = keymap.getCommandBindings({ visibility: "active", commands });
       const segments: HintSegment[] = [];
       for (const [name, label] of items) {
@@ -323,31 +435,32 @@ export function App() {
       return segments;
     };
     return {
-      main: build(HINT_ITEMS, HINT_COMMANDS),
-      prompt: build(PROMPT_HINT_ITEMS, PROMPT_HINT_COMMANDS),
+      main: build(HINT_ITEMS),
+      prompt: build(PROMPT_HINT_ITEMS),
+      picker: build(PICKER_HINT_ITEMS),
     };
   });
 
   const promptLabel = () => {
     const current = prompt();
     if (!current) return "";
-    return current.ruleId ? "edit domain" : PROMPT_LABELS[current.kind];
+    return current.ruleId ? "EDIT DOMAIN" : PROMPT_LABELS[current.kind];
   };
 
   return (
     <box flexDirection="column" width="100%" height="100%">
       <box
         borderStyle="rounded"
-        borderColor={theme.muted}
-        title="patchbay"
+        borderColor={theme.palette().border}
+        title="PATCHBAY"
         paddingLeft={1}
       >
         <box flexDirection="row" gap={1}>
-          <text fg={stateStyle().color}>{stateStyle().label}</text>
-          <text fg={theme.muted}>·</text>
-          <text fg={theme.text}>{vpn.activeServer()?.name ?? "no server"}</text>
-          <text fg={theme.muted}>·</text>
-          <text fg={theme.text}>{tunnelLabel()}</text>
+          <text fg={currentState().color}>{currentState().label}</text>
+          <text fg={theme.palette().textMuted}>·</text>
+          <text fg={theme.palette().text}>{vpn.activeServer()?.name ?? "no server"}</text>
+          <text fg={theme.palette().textMuted}>·</text>
+          <text fg={theme.palette().text}>{tunnelLabel()}</text>
         </box>
       </box>
 
@@ -357,18 +470,19 @@ export function App() {
           <box
             flexGrow={1}
             borderStyle="rounded"
-            borderColor={theme.accent}
-            title="settings"
+            borderColor={theme.palette().borderActive}
+            title="SETTINGS"
             paddingLeft={1}
           >
-            <For each={SETTINGS}>
-              {(key, index) => (
-                <text fg={index() === settingIndex() ? theme.accent : theme.text}>
-                  {index() === settingIndex() ? "> " : "  "}
-                  {SETTING_LABELS[key]}: {settingValue(key)}
-                </text>
-              )}
-            </For>
+            <select
+              {...listSelectProps(theme.palette())}
+              options={SETTINGS.map((key) => ({
+                name: `${SETTING_LABELS[key]}: ${settingValue(key)}`,
+                description: "",
+              }))}
+              selectedIndex={settingIndex()}
+              onChange={setSettingIndex}
+            />
           </box>
         }
       >
@@ -376,23 +490,26 @@ export function App() {
           <box
             flexGrow={1}
             borderStyle="rounded"
-            borderColor={pane() === "servers" ? theme.accent : theme.muted}
-            title="servers"
+            borderColor={
+              pane() === "servers" ? theme.palette().borderActive : theme.palette().border
+            }
+            title="SERVERS"
             paddingLeft={1}
             onMouseDown={() => setPane("servers")}
           >
             <Show
               when={vpn.servers().length > 0}
-              fallback={<text fg={theme.muted}>none in {serversDir()}</text>}
+              fallback={
+                <text fg={theme.palette().textMuted}>none in {serversDir()}</text>
+              }
             >
               <select
-                {...LIST_SELECT_PROPS}
+                {...listSelectProps(theme.palette())}
                 options={vpn.servers().map((server) => ({
                   name: `${server.name}${server.file === activeFile() ? "  (active)" : ""}`,
                   description: "",
-                  value: server.file,
                 }))}
-                focused={pane() === "servers" && prompt() === null}
+                focused={pane() === "servers" && !overlayOpen()}
                 onChange={setServerIndex}
               />
             </Show>
@@ -401,23 +518,24 @@ export function App() {
           <box
             flexGrow={1}
             borderStyle="rounded"
-            borderColor={pane() === "rules" ? theme.accent : theme.muted}
-            title="domain rules"
+            borderColor={
+              pane() === "rules" ? theme.palette().borderActive : theme.palette().border
+            }
+            title="DOMAIN RULES"
             paddingLeft={1}
             onMouseDown={() => setPane("rules")}
           >
             <Show
               when={vpn.config().domains.length > 0}
-              fallback={<text fg={theme.muted}>none — press a to add</text>}
+              fallback={<text fg={theme.palette().textMuted}>none — press a to add</text>}
             >
               <select
-                {...LIST_SELECT_PROPS}
+                {...listSelectProps(theme.palette())}
                 options={vpn.config().domains.map((rule) => ({
                   name: `${rule.enabled ? "[x]" : "[ ]"} ${rule.value}`,
                   description: "",
-                  value: rule.id,
                 }))}
-                focused={pane() === "rules" && prompt() === null}
+                focused={pane() === "rules" && !overlayOpen()}
                 onChange={setRuleIndex}
               />
             </Show>
@@ -428,9 +546,9 @@ export function App() {
       <scrollbox
         ref={(el) => (el.content.maxWidth = undefined)}
         borderStyle="rounded"
-        borderColor={theme.muted}
-        focusedBorderColor={theme.muted}
-        title="log"
+        borderColor={theme.palette().border}
+        focusedBorderColor={theme.palette().border}
+        title="LOG"
         paddingLeft={1}
         height={12}
         stickyScroll={true}
@@ -444,7 +562,11 @@ export function App() {
       >
         <For each={vpn.logLines()}>
           {(line) => (
-            <text fg={logColor(line)} wrapMode="none" width={line.length}>
+            <text
+              fg={logColor(line, theme.palette())}
+              wrapMode="none"
+              width={line.length}
+            >
               {line}
             </text>
           )}
@@ -452,27 +574,19 @@ export function App() {
       </scrollbox>
 
       <Show when={vpn.busy()}>
-        <text fg={theme.muted}>working...</text>
+        <text fg={theme.palette().textMuted}>working...</text>
       </Show>
       <Show when={!vpn.busy()}>
-        <HintText segments={hintSegments().main} />
+        <HintText segments={hintSegments().main} palette={theme.palette()} />
       </Show>
 
       <Show when={prompt() !== null}>
-        <box
-          position="absolute"
-          left={0}
-          top={0}
-          width="100%"
-          height="100%"
-          alignItems="center"
-          justifyContent="center"
-        >
+        <Dialog onClose={() => setPrompt(null)}>
           <box
             borderStyle="rounded"
-            borderColor={theme.accent}
+            borderColor={theme.palette().borderActive}
             title={promptLabel()}
-            backgroundColor={theme.surface}
+            backgroundColor={theme.palette().backgroundPanel}
             width="70%"
             paddingLeft={1}
             paddingRight={1}
@@ -484,16 +598,45 @@ export function App() {
                 el.focus();
               }}
               flexGrow={1}
-              textColor={theme.text}
-              focusedTextColor={theme.text}
-              cursorColor={theme.text}
+              textColor={theme.palette().text}
+              focusedTextColor={theme.palette().text}
+              cursorColor={theme.palette().primary}
               onSubmit={() => submitPrompt()}
             />
             <box flexDirection="row" justifyContent="center">
-              <HintText segments={hintSegments().prompt} />
+              <HintText segments={hintSegments().prompt} palette={theme.palette()} />
             </box>
           </box>
-        </box>
+        </Dialog>
+      </Show>
+
+      <Show when={pickerIndex() !== null}>
+        <Dialog onClose={cancelPicker}>
+          <box
+            borderStyle="rounded"
+            borderColor={theme.palette().borderActive}
+            title="THEME"
+            backgroundColor={theme.palette().backgroundPanel}
+            width="70%"
+            height={16}
+            paddingLeft={1}
+            paddingRight={1}
+          >
+            <select
+              {...listSelectProps(theme.palette())}
+              options={THEME_NAMES.map((name) => ({
+                name,
+                description: "",
+              }))}
+              selectedIndex={pickerIndex() ?? 0}
+              focused={true}
+              onChange={movePicker}
+            />
+            <box flexDirection="row" justifyContent="center">
+              <HintText segments={hintSegments().picker} palette={theme.palette()} />
+            </box>
+          </box>
+        </Dialog>
       </Show>
     </box>
   );

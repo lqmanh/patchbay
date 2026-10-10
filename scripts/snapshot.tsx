@@ -20,7 +20,7 @@ try {
     ),
     setup.renderer,
   );
-  await setup.waitForFrame((frame) => frame.includes("domain rules"));
+  await setup.waitForFrame((frame) => frame.includes("DOMAIN RULES"));
   await setup.waitForFrame((frame) => frame.includes("(active)"));
   const keys = (process.argv[4] ?? "").split(",").filter(Boolean);
   if (keys.length > 0) {

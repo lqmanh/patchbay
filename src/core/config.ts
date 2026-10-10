@@ -9,6 +9,7 @@ export type AppConfig = {
   mode: Mode;
   activeServer: string | null;
   domains: DomainRule[];
+  theme: string;
 };
 
 export const defaultConfig: AppConfig = {
@@ -16,6 +17,7 @@ export const defaultConfig: AppConfig = {
   mode: "split",
   activeServer: null,
   domains: [],
+  theme: "system",
 };
 
 export function freshConfig(): AppConfig {
@@ -48,6 +50,10 @@ export function sanitizeConfig(input: unknown): AppConfig {
     mode: raw.mode === "full" ? "full" : "split",
     activeServer: typeof raw.activeServer === "string" ? raw.activeServer : null,
     domains: Array.isArray(raw.domains) ? raw.domains.filter(isRule) : [],
+    theme:
+      typeof raw.theme === "string" && raw.theme.length > 0
+        ? raw.theme
+        : defaultConfig.theme,
   };
 }
 

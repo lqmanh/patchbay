@@ -25,7 +25,7 @@ bun run build      # compile a standalone binary to dist/patchbay
 - `space` — toggle interception (daemon + system SOCKS proxy; previous proxy state is restored on disable)
 - `tab` — switch pane; `j`/`k` or arrows move; `enter` selects a server or toggles a rule
 - `a` — add a domain rule; `e` — edit the selected rule; `d` — delete the selected rule
-- `s` — settings: mode (split/full), socks port, launch at login, intercept at login (auto-enables the system proxy when you log in)
+- `s` — settings
 - `r` — restart the daemon; `q` — quit
 
 Only domains matching a rule are routed through the VPN; everything else is dialed directly. `server` selection maps to the `.conf` files in `~/.config/patchbay/servers/`.
@@ -41,3 +41,7 @@ In the browser's `about:config`, set (applies immediately, no restart):
 - `network.proxy.default_pac_script_socks_version` → `5`
 
 Keep the browser's proxy setting on "Use system proxy settings" (the default); "No proxy" and "Auto-detect proxy settings" bypass patchbay entirely. This path also resolves DNS at the proxy, which is what allows domain rules to match.
+
+## Credits
+
+The bundled themes in `src/ui/theme/assets/` are copied from [OpenCode](https://github.com/anomalyco/opencode) (MIT), and the `system` theme generation takes inspiration from OpenCode's implementation.

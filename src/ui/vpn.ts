@@ -213,6 +213,12 @@ export function createVpn() {
     });
   }
 
+  async function setTheme(theme: string): Promise<void> {
+    await update((draft) => {
+      draft.theme = theme;
+    });
+  }
+
   async function setSocksPort(raw: string): Promise<void> {
     if (intercepting()) return;
     const port = Number(raw.trim());
@@ -273,6 +279,7 @@ export function createVpn() {
     restart,
     setMode,
     setSocksPort,
+    setTheme,
     toggleLaunchAtLogin,
     toggleInterceptAtLogin,
   };
