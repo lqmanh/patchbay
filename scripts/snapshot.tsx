@@ -20,8 +20,10 @@ try {
     ),
     setup.renderer,
   );
-  await setup.waitForFrame((frame) => frame.includes("DOMAIN RULES"));
-  await setup.waitForFrame((frame) => frame.includes("(active)"));
+  await setup.waitForFrame((frame) => frame.includes("RULES"));
+  await setup.waitForFrame((frame) =>
+    frame.split("\n").some((line) => line.includes("▶") && line.includes("●")),
+  );
   const keys = (process.argv[4] ?? "").split(",").filter(Boolean);
   if (keys.length > 0) {
     await setup.mockInput.pressKeys(keys);

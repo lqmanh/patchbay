@@ -13,7 +13,7 @@ if (command === INTERCEPT_ARGS[0]) {
   process.exit(await runIntercept(action ?? INTERCEPT_ARGS[1]));
 }
 
-const renderer = await createCliRenderer({ exitOnCtrlC: true, useMouse: true });
+const renderer = await createCliRenderer({ exitOnCtrlC: false, useMouse: true });
 const keymap = createAppKeymap(renderer);
 await render(
   () => (

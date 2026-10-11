@@ -1,5 +1,13 @@
 /** @jsxImportSource @opentui/solid */
-import { SelectRenderable, type InputRenderable, type MouseEvent } from "@opentui/core";
+import {
+  SelectRenderable,
+  type CliRenderer,
+  type InputRenderable,
+  type KeyEvent,
+  type MouseEvent,
+  type Renderable,
+} from "@opentui/core";
+import type { CommandHandler } from "@opentui/keymap";
 import { formatKeySequence } from "@opentui/keymap/extras";
 import {
   reactiveMatcherFromSignal,
@@ -7,9 +15,18 @@ import {
   useKeymapSelector,
 } from "@opentui/keymap/solid";
 import { useRenderer } from "@opentui/solid";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+} from "solid-js";
 import { serversDir } from "../core/paths";
 import { Dialog } from "./dialog";
+import { COMMAND_LABELS, HINTS, KEY_BINDINGS, type CommandName } from "./keymap";
 import { createTheme, THEME_NAMES, type Palette } from "./theme";
 import { createVpn } from "./vpn";
 
@@ -56,30 +73,6 @@ function logColor(line: string, palette: Palette) {
   return palette.text;
 }
 
-const HINT_ITEMS: ReadonlyArray<readonly [string, string]> = [
-  ["interception.toggle", "intercept"],
-  ["pane.toggle", "pane"],
-  ["rule.add", "add"],
-  ["rule.edit", "edit"],
-  ["rule.delete", "delete"],
-  ["item.activate", "activate"],
-  ["daemon.restart", "restart"],
-  ["settings.change", "change"],
-  ["screen.settings", "settings"],
-  ["screen.back", "back"],
-  ["app.quit", "quit"],
-];
-
-const PROMPT_HINT_ITEMS: ReadonlyArray<readonly [string, string]> = [
-  ["prompt.submit", "confirm"],
-  ["prompt.cancel", "cancel"],
-];
-
-const PICKER_HINT_ITEMS: ReadonlyArray<readonly [string, string]> = [
-  ["theme.confirm", "apply"],
-  ["theme.cancel", "cancel"],
-];
-
 type SelectViewport = Omit<
   SelectRenderable,
   "scrollOffset" | "maxVisibleItems" | "linesPerItem"
@@ -122,16 +115,58 @@ function clickSelect(event: MouseEvent) {
   select.setSelectedIndex(row);
 }
 
-const SELECT_KEY_BINDINGS = [
-  { name: "j", action: "move-down" as const },
-  { name: "k", action: "move-up" as const },
-];
+function focusedSelect(
+  run: (select: SelectViewport) => void,
+): CommandHandler<Renderable, KeyEvent> {
+  return (ctx) => {
+    const select = selectViewport(ctx.focused);
+    if (select) run(select);
+  };
+}
+
+// moveUp/moveDown wrap at the edges; paging must clamp.
+function pageSelect(select: SelectViewport, direction: -1 | 1) {
+  select.setSelectedIndex(
+    clampIndex(
+      select.getSelectedIndex() + direction * select.maxVisibleItems,
+      select.options.length,
+    ),
+  );
+}
+
+const ignoreKeyPress = () => false;
+
+// SelectRenderable merges custom keyBindings with its defaults, so keys cannot
+// be removed through options; list navigation is dispatched by the keymap.
+function disableSelectKeys(select: SelectRenderable) {
+  select.handleKeyPress = ignoreKeyPress;
+}
+
+// Renderables have no resize event; the frame callback runs after layout.
+function createSelectWidth(renderer: CliRenderer) {
+  const [width, setWidth] = createSignal(0);
+  let element: SelectRenderable | undefined;
+  const ref = (el: SelectRenderable) => {
+    element = el;
+    disableSelectKeys(el);
+  };
+  onMount(() => {
+    const onFrame = () => {
+      const next = element?.width ?? 0;
+      if (next !== width()) setWidth(next);
+    };
+    renderer.on("frame", onFrame);
+    onCleanup(() => renderer.off("frame", onFrame));
+  });
+  return { ref, width };
+}
 
 function listSelectProps(palette: Palette) {
   return {
     flexGrow: 1,
     showDescription: false,
     wrapSelection: true,
+    ref: disableSelectKeys,
     onMouseDown: clickSelect,
     onMouseScroll: wheelSelect,
     backgroundColor: "transparent",
@@ -140,12 +175,21 @@ function listSelectProps(palette: Palette) {
     focusedTextColor: palette.text,
     selectedBackgroundColor: "transparent",
     selectedTextColor: palette.primary,
-    keyBindings: SELECT_KEY_BINDINGS,
   };
 }
 
 function clampIndex(index: number, length: number): number {
   return Math.min(Math.max(index, 0), Math.max(length - 1, 0));
+}
+
+// Dot sits at column width - 2 (one gap before the border); truncate to fit.
+function rowLabel(name: string, active: boolean, width: number): string {
+  if (!active) return name;
+  const area = width - 4;
+  if (area < 3) return name;
+  const room = area - 2;
+  const text = name.length > room ? `${name.slice(0, room - 1)}…` : name;
+  return `${text.padEnd(area - 1)}●`;
 }
 
 type HintSegment = { text: string; muted: boolean };
@@ -180,6 +224,18 @@ export function App() {
   const [pickerIndex, setPickerIndex] = createSignal<number | null>(null);
   let promptInput: InputRenderable | undefined;
 
+  const { ref: serversRef, width: serversWidth } = createSelectWidth(renderer);
+  const { ref: pickerRef, width: pickerWidth } = createSelectWidth(renderer);
+
+  let serverIndexInitialized = false;
+  createEffect(() => {
+    const active = vpn.activeServer();
+    if (serverIndexInitialized || !active) return;
+    serverIndexInitialized = true;
+    const index = vpn.servers().findIndex((server) => server.file === active.file);
+    if (index > 0) setServerIndex(index);
+  });
+
   const stateKind = (): StateKind => {
     if (vpn.intercepting() && !vpn.running()) return "broken";
     if (vpn.intercepting()) return "on";
@@ -203,10 +259,6 @@ export function App() {
 
   const selectedRule = () =>
     vpn.config().domains[clampIndex(ruleIndex(), vpn.config().domains.length)] ?? null;
-
-  function moveSetting(delta: number) {
-    setSettingIndex((index) => (index + delta + SETTINGS.length) % SETTINGS.length);
-  }
 
   function activate() {
     if (pane() === "servers") {
@@ -302,41 +354,38 @@ export function App() {
     }
   }
 
-  const commands = [
-    { name: "app.quit", run: () => renderer.destroy() },
-    { name: "screen.settings", run: () => setScreen("settings") },
-    { name: "screen.back", run: () => setScreen("main") },
-    { name: "settings.change", run: activateSetting },
-    {
-      name: "pane.toggle",
-      run: () => setPane((current) => (current === "servers" ? "rules" : "servers")),
+  const commands: Record<CommandName, CommandHandler<Renderable, KeyEvent>> = {
+    "app.quit": () => renderer.destroy(),
+    "screen.settings": () => void setScreen("settings"),
+    "screen.back": () => void setScreen("main"),
+    "settings.change": activateSetting,
+    "pane.toggle": () =>
+      void setPane((current) => (current === "servers" ? "rules" : "servers")),
+    "interception.toggle": () => void vpn.toggleInterception(),
+    "rule.add": () => void setPrompt({ kind: "domain", value: "" }),
+    "rule.edit": () => {
+      const rule = selectedRule();
+      if (rule) setPrompt({ kind: "domain", value: rule.value, ruleId: rule.id });
     },
-    { name: "settings.down", run: () => moveSetting(1) },
-    { name: "settings.up", run: () => moveSetting(-1) },
-    { name: "interception.toggle", run: () => void vpn.toggleInterception() },
-    { name: "rule.add", run: () => setPrompt({ kind: "domain", value: "" }) },
-    {
-      name: "rule.edit",
-      run: () => {
-        const rule = selectedRule();
-        if (rule) setPrompt({ kind: "domain", value: rule.value, ruleId: rule.id });
-      },
+    "rule.delete": () => {
+      const rule = selectedRule();
+      if (rule) void vpn.removeRule(rule.id);
     },
-    {
-      name: "rule.delete",
-      run: () => {
-        const rule = selectedRule();
-        if (rule) void vpn.removeRule(rule.id);
-      },
-    },
-    { name: "item.activate", run: activate },
-    { name: "daemon.restart", run: () => void vpn.restart() },
-    { name: "theme.confirm", run: applyPicker },
-    {
-      name: "theme.cancel",
-      run: cancelPicker,
-    },
-  ];
+    "item.activate": activate,
+    "daemon.restart": () => void vpn.restart(),
+    "picker.confirm": applyPicker,
+    "picker.cancel": cancelPicker,
+    "prompt.submit": submitPrompt,
+    "prompt.cancel": () => void setPrompt(null),
+    "list.up": focusedSelect((select) => select.moveUp()),
+    "list.down": focusedSelect((select) => select.moveDown()),
+    "list.page-up": focusedSelect((select) => pageSelect(select, -1)),
+    "list.page-down": focusedSelect((select) => pageSelect(select, 1)),
+    "list.first": focusedSelect((select) => select.setSelectedIndex(0)),
+    "list.last": focusedSelect((select) =>
+      select.setSelectedIndex(select.options.length - 1),
+    ),
+  };
 
   const when = (predicate: () => boolean) =>
     reactiveMatcherFromSignal(createMemo(predicate));
@@ -352,75 +401,50 @@ export function App() {
   const promptActive = when(() => prompt() !== null);
   const pickerActive = when(() => pickerIndex() !== null);
 
-  useBindings(() => ({ commands }));
+  useBindings(() => ({
+    commands: Object.entries(commands).map(([name, run]) => ({ name, run })),
+  }));
+
+  useBindings(() => ({ bindings: KEY_BINDINGS.global }));
 
   useBindings(() => ({
     enabled: overlayClosed,
-    bindings: [{ key: "q", cmd: "app.quit" }],
+    bindings: KEY_BINDINGS.base,
   }));
 
   useBindings(() => ({
     enabled: mainActive,
-    bindings: [
-      { key: "s", cmd: "screen.settings" },
-      { key: "tab", cmd: "pane.toggle" },
-      { key: "space, t", cmd: "interception.toggle" },
-      { key: "a", cmd: "rule.add" },
-      { key: "return, enter", cmd: "item.activate" },
-      { key: "r", cmd: "daemon.restart" },
-    ],
+    bindings: KEY_BINDINGS.main,
   }));
 
   useBindings(() => ({
     enabled: rulesActive,
-    bindings: [
-      { key: "e", cmd: "rule.edit" },
-      { key: "d", cmd: "rule.delete" },
-    ],
+    bindings: KEY_BINDINGS.rules,
   }));
 
   useBindings(() => ({
     enabled: settingsActive,
-    bindings: [
-      { key: "s", cmd: "screen.back" },
-      { key: "escape", cmd: "screen.back" },
-      { key: "j, down", cmd: "settings.down" },
-      { key: "k, up", cmd: "settings.up" },
-      { key: "return, enter", cmd: "settings.change" },
-    ],
+    bindings: KEY_BINDINGS.settings,
   }));
 
   useBindings(() => ({
     enabled: promptActive,
-    commands: [
-      { name: "prompt.submit", run: () => submitPrompt() },
-      {
-        name: "prompt.cancel",
-        run: () => {
-          setPrompt(null);
-        },
-      },
-    ],
-    bindings: [
-      { key: "return, enter", cmd: "prompt.submit" },
-      { key: "escape", cmd: "prompt.cancel" },
-    ],
+    bindings: KEY_BINDINGS.prompt,
   }));
 
   useBindings(() => ({
     enabled: pickerActive,
-    bindings: [
-      { key: "return, enter", cmd: "theme.confirm" },
-      { key: "escape", cmd: "theme.cancel" },
-    ],
+    bindings: KEY_BINDINGS.picker,
   }));
 
   const hintSegments = useKeymapSelector((keymap) => {
-    const build = (items: ReadonlyArray<readonly [string, string]>) => {
-      const commands = items.map(([name]) => name);
-      const bindings = keymap.getCommandBindings({ visibility: "active", commands });
+    const build = (names: readonly CommandName[]) => {
+      const bindings = keymap.getCommandBindings({
+        visibility: "active",
+        commands: names,
+      });
       const segments: HintSegment[] = [];
-      for (const [name, label] of items) {
+      for (const name of names) {
         const binding = bindings.get(name)?.[0];
         if (!binding) continue;
         if (segments.length > 0) segments.push({ text: " · ", muted: true });
@@ -430,14 +454,14 @@ export function App() {
           }),
           muted: false,
         });
-        segments.push({ text: ` ${label}`, muted: true });
+        segments.push({ text: ` ${COMMAND_LABELS[name]}`, muted: true });
       }
       return segments;
     };
     return {
-      main: build(HINT_ITEMS),
-      prompt: build(PROMPT_HINT_ITEMS),
-      picker: build(PICKER_HINT_ITEMS),
+      main: build(HINTS.main),
+      prompt: build(HINTS.prompt),
+      picker: build(HINTS.picker),
     };
   });
 
@@ -454,6 +478,7 @@ export function App() {
         borderColor={theme.palette().border}
         title="PATCHBAY"
         paddingLeft={1}
+        paddingRight={1}
       >
         <box flexDirection="row" gap={1}>
           <text fg={currentState().color}>{currentState().label}</text>
@@ -473,6 +498,7 @@ export function App() {
             borderColor={theme.palette().borderActive}
             title="SETTINGS"
             paddingLeft={1}
+            paddingRight={1}
           >
             <select
               {...listSelectProps(theme.palette())}
@@ -481,6 +507,7 @@ export function App() {
                 description: "",
               }))}
               selectedIndex={settingIndex()}
+              focused={!overlayOpen()}
               onChange={setSettingIndex}
             />
           </box>
@@ -495,6 +522,7 @@ export function App() {
             }
             title="SERVERS"
             paddingLeft={1}
+            paddingRight={1}
             onMouseDown={() => setPane("servers")}
           >
             <Show
@@ -505,10 +533,16 @@ export function App() {
             >
               <select
                 {...listSelectProps(theme.palette())}
+                ref={serversRef}
                 options={vpn.servers().map((server) => ({
-                  name: `${server.name}${server.file === activeFile() ? "  (active)" : ""}`,
+                  name: rowLabel(
+                    server.name,
+                    server.file === activeFile(),
+                    serversWidth(),
+                  ),
                   description: "",
                 }))}
+                selectedIndex={serverIndex()}
                 focused={pane() === "servers" && !overlayOpen()}
                 onChange={setServerIndex}
               />
@@ -521,8 +555,9 @@ export function App() {
             borderColor={
               pane() === "rules" ? theme.palette().borderActive : theme.palette().border
             }
-            title="DOMAIN RULES"
+            title="RULES"
             paddingLeft={1}
+            paddingRight={1}
             onMouseDown={() => setPane("rules")}
           >
             <Show
@@ -550,6 +585,7 @@ export function App() {
         focusedBorderColor={theme.palette().border}
         title="LOG"
         paddingLeft={1}
+        paddingRight={1}
         height={12}
         stickyScroll={true}
         stickyStart="bottom"
@@ -601,7 +637,6 @@ export function App() {
               textColor={theme.palette().text}
               focusedTextColor={theme.palette().text}
               cursorColor={theme.palette().primary}
-              onSubmit={() => submitPrompt()}
             />
             <box flexDirection="row" justifyContent="center">
               <HintText segments={hintSegments().prompt} palette={theme.palette()} />
@@ -624,8 +659,9 @@ export function App() {
           >
             <select
               {...listSelectProps(theme.palette())}
+              ref={pickerRef}
               options={THEME_NAMES.map((name) => ({
-                name,
+                name: rowLabel(name, name === theme.active(), pickerWidth()),
                 description: "",
               }))}
               selectedIndex={pickerIndex() ?? 0}
