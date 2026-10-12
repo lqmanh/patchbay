@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/patchbay-core",
+    "crates/patchbay-cli",
+    "crates/patchbay-gui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+license = "MIT"
+
+[workspace.dependencies]
+gpui-kit = "=0.7.3"
+
+# Core-only dependencies.
+anyhow = "=1.0.104"
+nix = { version = "=0.31.3", features = ["process", "signal"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = { version = "=1.0.154", features = ["preserve_order"] }

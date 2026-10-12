@@ -5,6 +5,9 @@ node_modules/
 dist/
 *.bun-build
 
+# Rust
+target/
+
 # environment (Bun auto-loads .env)
 .env
 .env.*
