@@ -1,34 +1,31 @@
 # patchbay
 
-Per-domain VPN routing for macOS. A TUI front-end for [sing-box](https://github.com/SagerNet/sing-box): only the domains you list go through the VPN, everything else stays direct.
+Per-domain VPN routing for macOS. A desktop app and headless CLI for [sing-box](https://github.com/SagerNet/sing-box): only the domains you list go through the VPN, everything else stays direct.
 
 ## Requirements
 
-- [Bun](https://bun.sh) >= 1.4
 - [sing-box](https://github.com/SagerNet/sing-box) — `brew install sing-box`
 - A WireGuard credential file from your VPN provider (e.g. MEGA VPN `.conf`) in `~/.config/patchbay/servers/`
+- Rust 1.98.1, pinned in `rust-toolchain.toml`
 
-## Development
+## Build and run
 
 ```sh
-bun install
-bun run dev        # run the TUI
-bun run smoke      # start sing-box, verify the tunnel, stop it (optional: server file)
-bun run src/index.tsx intercept on|off   # headless control (also used by the login agent)
-bun test           # unit tests
-bun run check      # typecheck + lint + format check
-bun run build      # compile a standalone binary to dist/patchbay
+cargo run -p patchbay-gui                       # desktop app
+cargo run -p patchbay-cli -- intercept on|off   # headless control (also used by the login agent)
+cargo run -p patchbay-cli -- smoke [server]     # start sing-box, verify the tunnel, stop it
+cargo test --workspace                          # unit tests
 ```
 
 ## Usage
 
-- `space` — toggle interception (daemon + system SOCKS proxy; previous proxy state is restored on disable)
-- `tab` — switch pane; `j`/`k` or arrows move; `enter` selects a server or toggles a rule
-- `a` — add a domain rule; `e` — edit the selected rule; `d` — delete the selected rule
-- `s` — settings
-- `r` — restart the daemon; `q` — quit
+The app window has a sidebar with:
 
-Only domains matching a rule are routed through the VPN; everything else is dialed directly. `server` selection maps to the `.conf` files in `~/.config/patchbay/servers/`.
+- **Status** — the interception switch (daemon plus system SOCKS proxy; the previous proxy state is restored on disable), active server, split/full mode, SOCKS port, and tunnel restart.
+- **Servers** — the `.conf` files in `~/.config/patchbay/servers/`; the active one is what the tunnel runs with.
+- **Rules** — domains and regexes routed through the VPN; everything else is dialed directly.
+- **Log** — the sing-box daemon log, with level colors and a follow switch.
+- **Settings** — launch at login, intercept at login, and theme (System/Light/Dark).
 
 Another VPN app (including the MEGA desktop client) must be disconnected while patchbay intercepts: its tunnel becomes the default route, macOS replaces the global proxy state that apps read, and enabling interception fails with "no active network service".
 
@@ -42,6 +39,14 @@ In the browser's `about:config`, set (applies immediately, no restart):
 
 Keep the browser's proxy setting on "Use system proxy settings" (the default); "No proxy" and "Auto-detect proxy settings" bypass patchbay entirely. This path also resolves DNS at the proxy, which is what allows domain rules to match.
 
+## Layout
+
+- `crates/patchbay-core` — config, rules, sing-box config generation, daemon lifecycle, macOS platform integration
+- `crates/patchbay-cli` — `patchbay`: `intercept on|off` and `smoke`
+- `crates/patchbay-gui` — `patchbay-gui`: the gpui-kit desktop app
+
+`crates/patchbay-core/tests/fixtures/` holds the byte-exact reference output of the retired TypeScript renderer; the Rust generator must keep matching it.
+
 ## Credits
 
-The bundled themes in `src/ui/theme/assets/` are copied from [OpenCode](https://github.com/anomalyco/opencode) (MIT), and the `system` theme generation takes inspiration from OpenCode's implementation.
+Built with [gpui](https://github.com/zed-industries/zed) and [gpui-kit](https://gpui-kit.com); the tunnel is [sing-box](https://github.com/SagerNet/sing-box).

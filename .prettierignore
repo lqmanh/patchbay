@@ -1,5 +1,0 @@
-bun.lock
-dist/
-
-# byte-exact reference output from the TypeScript renderer
-crates/patchbay-core/tests/fixtures/

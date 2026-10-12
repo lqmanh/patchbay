@@ -1,14 +1,10 @@
-# dependencies
-node_modules/
-
-# build output
-dist/
-*.bun-build
-
 # Rust
 target/
 
-# environment (Bun auto-loads .env)
+# packaging output
+dist/
+
+# environment
 .env
 .env.*
 
