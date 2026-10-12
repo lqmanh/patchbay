@@ -153,8 +153,7 @@ impl AppShell {
         target: Section,
         cx: &mut Context<Self>,
     ) -> SidebarMenuItem {
-        SidebarMenuItem::new(label)
-            .icon(icon)
+        menu_item(label, icon)
             .active(self.section == target)
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.section = target;
@@ -174,8 +173,11 @@ impl AppShell {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .when(icon_collapsed, |this| this.w_full().justify_center())
-                    .when(!icon_collapsed, |this| this.px_1())
+                    // The collapsed sidebar pads around its header 12px more
+                    // (pt_2 + gap_2 + p_2 vs pt_3); a header 12px shorter
+                    // keeps the menu items in place.
+                    .when(icon_collapsed, |this| this.h_8().w_full().justify_center())
+                    .when(!icon_collapsed, |this| this.h_11().px_1())
                     .child(
                         crate::widgets::logo()
                             .size_8()
@@ -210,8 +212,7 @@ impl AppShell {
                     .child(self.sidebar_item("Log", IconName::SquareTerminal, Section::Log, cx))
                     .child(self.sidebar_item("Settings", IconName::Settings, Section::Settings, cx))
                     .child(
-                        SidebarMenuItem::new("About")
-                            .icon(IconName::Info)
+                        menu_item("About", IconName::Info)
                             .on_click(cx.listener(|_, _, _, cx| crate::show_about(cx))),
                     ),
             )
@@ -228,14 +229,14 @@ impl AppShell {
                 .items_center()
                 .gap_2()
                 .pr_3()
-                .child(
+                .child(titlebar_control(
                     SidebarToggleButton::new()
                         .collapsed(self.collapsed)
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.collapsed = !this.collapsed;
                             cx.notify();
                         })),
-                )
+                ))
                 .child(
                     h_flex()
                         .ml_auto()
@@ -283,6 +284,24 @@ impl AppShell {
             )
             .child(div().flex_1().min_h_0().child(body))
     }
+}
+
+/// Wraps a title bar button so the title bar's double-click action
+/// (zoom/minimize) and window drag don't fire for it: gpui dispatches a click
+/// only to ancestors that saw the mouse-down.
+fn titlebar_control(child: impl IntoElement) -> impl IntoElement {
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(child)
+}
+
+/// Expanded items are fixed at h_7 but collapsed ones size to their content;
+/// pin both so items don't shift when the sidebar collapses.
+fn menu_item(label: &'static str, icon: IconName) -> SidebarMenuItem {
+    SidebarMenuItem::new(label).icon(icon).h_7()
 }
 
 impl Render for AppShell {

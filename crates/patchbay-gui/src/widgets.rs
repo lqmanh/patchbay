@@ -91,7 +91,7 @@ pub fn page_body(id: &'static str, children: impl IntoIterator<Item = AnyElement
         .id(id)
         .size_full()
         .overflow_y_scroll()
-        .child(v_flex().gap_6().p_6().max_w(px(720.)).children(children))
+        .child(v_flex().gap_6().p_6().children(children))
         .into_any_element()
 }
 
