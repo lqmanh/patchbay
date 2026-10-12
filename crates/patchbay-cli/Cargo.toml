@@ -10,4 +10,6 @@ name = "patchbay"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = { workspace = true }
 patchbay-core = { path = "../patchbay-core" }
+serde_json = { workspace = true }

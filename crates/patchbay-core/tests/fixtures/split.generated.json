@@ -19,8 +19,12 @@
     ],
     "rules": [
       {
-        "domain": ["reddit.com"],
-        "domain_suffix": [".reddit.com"],
+        "domain": [
+          "reddit.com"
+        ],
+        "domain_suffix": [
+          ".reddit.com"
+        ],
         "server": "dns-tunnel"
       }
     ],
@@ -39,7 +43,10 @@
       "type": "wireguard",
       "tag": "tunnel",
       "domain_resolver": "dns-direct",
-      "address": ["10.0.0.2/32", "fc00::2/128"],
+      "address": [
+        "10.0.0.2/32",
+        "fc00::2/128"
+      ],
       "private_key": "FAKE_PRIVATE_KEY",
       "peers": [
         {
@@ -47,7 +54,10 @@
           "port": 51820,
           "public_key": "FAKE_PUBLIC_KEY",
           "pre_shared_key": "FAKE_PRESHARED_KEY",
-          "allowed_ips": ["0.0.0.0/0", "::/0"],
+          "allowed_ips": [
+            "0.0.0.0/0",
+            "::/0"
+          ],
           "persistent_keepalive_interval": 25
         }
       ],
@@ -63,8 +73,12 @@
   "route": {
     "rules": [
       {
-        "domain": ["reddit.com"],
-        "domain_suffix": [".reddit.com"],
+        "domain": [
+          "reddit.com"
+        ],
+        "domain_suffix": [
+          ".reddit.com"
+        ],
         "action": "route",
         "outbound": "tunnel"
       }

@@ -3,6 +3,11 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 
+pub fn home_dir() -> anyhow::Result<PathBuf> {
+    let home = std::env::var_os("HOME").context("HOME is not set")?;
+    Ok(PathBuf::from(home))
+}
+
 #[derive(Debug, Clone)]
 pub struct Paths {
     config_home: PathBuf,
@@ -31,10 +36,7 @@ impl Paths {
     }
 
     pub fn from_env() -> anyhow::Result<Self> {
-        let home = std::env::var_os("HOME").context("HOME is not set")?;
-        Ok(Self::new(PathBuf::from(home), |name| {
-            std::env::var(name).ok()
-        }))
+        Ok(Self::new(home_dir()?, |name| std::env::var(name).ok()))
     }
 
     pub fn config_dir(&self) -> PathBuf {
@@ -74,6 +76,10 @@ impl Paths {
 
     pub fn log_file(&self) -> PathBuf {
         self.state_dir().join("daemon.log")
+    }
+
+    pub fn intercept_log_file(&self) -> PathBuf {
+        self.state_dir().join("intercept.log")
     }
 
     pub fn proxy_state_file(&self) -> PathBuf {

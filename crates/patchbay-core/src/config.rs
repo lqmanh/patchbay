@@ -35,7 +35,7 @@ pub fn default_config() -> AppConfig {
     }
 }
 
-fn parse_port(value: &Value) -> Option<u16> {
+pub(crate) fn parse_port(value: &Value) -> Option<u16> {
     let number = value.as_f64()?;
     if number.fract() == 0.0 && number > 0.0 && number < 65536.0 {
         Some(number as u16)
