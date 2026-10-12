@@ -6,8 +6,8 @@ mod widgets;
 
 use gpui_kit::assets::Assets;
 use gpui_kit::component::{
-    ActiveTheme, Icon, IconName, Sizable, StyledExt as _, TitleBar, WindowExt as _,
-    dialog::AlertDialog, h_flex, link::Link, v_flex,
+    ActiveTheme, StyledExt as _, TitleBar, WindowExt as _, dialog::AlertDialog, h_flex, link::Link,
+    v_flex,
 };
 use gpui_kit::*;
 
@@ -41,7 +41,7 @@ actions!(
 fn main() {
     application()
         .with_assets(Assets)
-        .with_quit_mode(QuitMode::LastWindowClosed)
+        .with_quit_mode(QuitMode::Explicit)
         .run(|cx| {
             init(cx);
 
@@ -73,9 +73,11 @@ fn main() {
                 move |window, cx| {
                     let theme = state.read(cx).theme();
                     theme.apply(Some(window), cx);
+                    // Quit without closing the window: closing it aborts in
+                    // AppKit's Touch Bar KVO teardown (gpui accesskit bug).
                     window.on_window_should_close(cx, |_, cx| {
                         cx.quit();
-                        true
+                        false
                     });
                     cx.new(|cx| AppShell::new(state.clone(), window, cx))
                 }
@@ -95,9 +97,8 @@ fn register_actions(cx: &mut App, state: Entity<AppState>) {
     cx.on_action(|_: &MinimizeWindow, cx: &mut App| {
         with_main_window(cx, |window, _| window.minimize_window());
     });
-    cx.on_action(|_: &CloseWindow, cx: &mut App| {
-        with_main_window(cx, |window, _| window.remove_window());
-    });
+    // Quit like the close button; removing the window crashes.
+    cx.on_action(|_: &CloseWindow, cx: &mut App| cx.quit());
     cx.on_action(|_: &OpenSettings, cx: &mut App| {
         let Some(main) = main_window(cx) else {
             return;
@@ -147,17 +148,7 @@ fn about_dialog(alert: AlertDialog, _: &mut Window, cx: &mut App) -> AlertDialog
             .items_center()
             .gap_2()
             .py_2()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .size_16()
-                    .rounded(px(14.))
-                    .bg(cx.theme().sidebar_primary)
-                    .text_color(cx.theme().sidebar_primary_foreground)
-                    .child(Icon::new(IconName::GalleryVerticalEnd).with_size(px(32.))),
-            )
+            .child(widgets::logo().size_16())
             .child(div().text_lg().font_semibold().child("Patchbay"))
             .child(
                 div()

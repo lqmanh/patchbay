@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="20 20 120 120">
+  <!-- Artwork without the tile, for other platforms and docs. Keep in sync with patchbay.svg -->
+  <defs>
+    <linearGradient id="direct-gradient" gradientUnits="userSpaceOnUse" x1="80" y1="56" x2="80" y2="104">
+      <stop offset="0" stop-color="#8f7964"/>
+      <stop offset="1" stop-color="#685341"/>
+    </linearGradient>
+    <linearGradient id="vpn-gradient" gradientUnits="userSpaceOnUse" x1="40" y1="56" x2="120" y2="104">
+      <stop offset="0" stop-color="#ff903f"/>
+      <stop offset="1" stop-color="#ec4826"/>
+    </linearGradient>
+    <filter id="direct-shadow" filterUnits="userSpaceOnUse" x="0" y="0" width="160" height="160">
+      <feDropShadow dx="0" dy="1.2" stdDeviation="1" flood-color="#3a2614" flood-opacity="0.22"/>
+    </filter>
+    <filter id="vpn-shadow" filterUnits="userSpaceOnUse" x="0" y="0" width="160" height="160">
+      <feDropShadow dx="0" dy="1.2" stdDeviation="1" flood-color="#b4410c" flood-opacity="0.22"/>
+    </filter>
+    <mask id="vpn-gap" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="160">
+      <rect width="160" height="160" fill="#ffffff"/>
+      <path d="M40 56 C40 88 120 72 120 104" fill="none" stroke="#000000" stroke-width="16" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <g id="artwork">
+    <g id="jacks" fill="#f8efe4">
+      <circle cx="40" cy="56" r="12"/>
+      <circle cx="80" cy="56" r="12"/>
+      <circle cx="120" cy="56" r="12"/>
+      <circle cx="40" cy="104" r="12"/>
+      <circle cx="80" cy="104" r="12"/>
+      <circle cx="120" cy="104" r="12"/>
+    </g>
+    <g id="sockets" fill="#3a2c20">
+      <circle cx="40" cy="56" r="6"/>
+      <circle cx="80" cy="56" r="6"/>
+      <circle cx="120" cy="56" r="6"/>
+      <circle cx="40" cy="104" r="6"/>
+      <circle cx="80" cy="104" r="6"/>
+      <circle cx="120" cy="104" r="6"/>
+    </g>
+    <g id="cable-direct" mask="url(#vpn-gap)">
+      <path d="M80 56 V104" fill="none" stroke="url(#direct-gradient)" stroke-width="8" stroke-linecap="round" filter="url(#direct-shadow)"/>
+      <circle cx="80" cy="56" r="9" fill="#8f7964"/>
+      <circle cx="80" cy="56" r="3.6" fill="#ead9c6"/>
+      <circle cx="80" cy="104" r="9" fill="#685341"/>
+      <circle cx="80" cy="104" r="3.6" fill="#ead9c6"/>
+    </g>
+    <g id="cable-vpn">
+      <path d="M40 56 C40 88 120 72 120 104" fill="none" stroke="url(#vpn-gradient)" stroke-width="8" stroke-linecap="round" filter="url(#vpn-shadow)"/>
+      <circle cx="40" cy="56" r="9" fill="#ff903f"/>
+      <circle cx="40" cy="56" r="3.6" fill="#ffe3d1"/>
+      <circle cx="120" cy="104" r="9" fill="#ec4826"/>
+      <circle cx="120" cy="104" r="3.6" fill="#ffe3d1"/>
+    </g>
+  </g>
+</svg>

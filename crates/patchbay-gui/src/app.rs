@@ -165,9 +165,6 @@ impl AppShell {
     fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement + 'static {
         let icon_collapsed = self.collapsed;
         let muted = cx.theme().muted_foreground;
-        let primary = cx.theme().sidebar_primary;
-        let primary_foreground = cx.theme().sidebar_primary_foreground;
-        let radius = cx.theme().radius;
 
         Sidebar::new("sidebar")
             .collapsible(SidebarCollapsible::Icon)
@@ -180,17 +177,10 @@ impl AppShell {
                     .when(icon_collapsed, |this| this.w_full().justify_center())
                     .when(!icon_collapsed, |this| this.px_1())
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_center()
+                        crate::widgets::logo()
                             .size_8()
                             .flex_shrink_0()
-                            .rounded(radius)
-                            .bg(primary)
-                            .text_color(primary_foreground)
-                            .when(icon_collapsed, |this| this.size_6())
-                            .child(Icon::new(IconName::GalleryVerticalEnd)),
+                            .when(icon_collapsed, |this| this.size_6()),
                     )
                     .when(!icon_collapsed, |this| {
                         this.child(

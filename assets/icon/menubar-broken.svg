@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="16" viewBox="0 0 22 16">
+  <!-- Menu bar template image: tunnel down, traffic blocked (either mode). Black on transparent; macOS tints it. See README.md -->
+  <defs>
+    <!-- clear space around the badge -->
+    <mask id="badge-knockout" maskUnits="userSpaceOnUse" x="0" y="0" width="22" height="16">
+      <rect width="22" height="16" fill="#ffffff"/>
+      <path d="M17 8.6 L20.6 15 H13.4 Z" fill="#000000" stroke="#000000" stroke-width="2.6" stroke-linejoin="round"/>
+    </mask>
+    <!-- the "!" is cut out of the badge -->
+    <mask id="exclamation" maskUnits="userSpaceOnUse" x="0" y="0" width="22" height="16">
+      <rect width="22" height="16" fill="#ffffff"/>
+      <rect x="16.55" y="10.5" width="0.9" height="2.5" rx="0.45" fill="#000000"/>
+      <circle cx="17" cy="13.9" r="0.5" fill="#000000"/>
+    </mask>
+  </defs>
+  <g id="jacks" opacity="0.5" fill="none" stroke="#000000" stroke-width="1" mask="url(#badge-knockout)">
+    <circle cx="3" cy="4" r="1.5"/>
+    <circle cx="10" cy="4" r="1.5"/>
+    <circle cx="17" cy="4" r="1.5"/>
+    <circle cx="3" cy="12" r="1.5"/>
+    <circle cx="10" cy="12" r="1.5"/>
+    <circle cx="17" cy="12" r="1.5"/>
+  </g>
+  <path id="badge" d="M17 8.6 L20.6 15 H13.4 Z" fill="#000000" stroke="#000000" stroke-width="0.8" stroke-linejoin="round" mask="url(#exclamation)"/>
+</svg>

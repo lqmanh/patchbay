@@ -1,3 +1,5 @@
+use std::sync::{Arc, LazyLock};
+
 use gpui_kit::component::{
     ActiveTheme, Icon, IconName, StyledExt as _,
     empty::{
@@ -11,6 +13,18 @@ use gpui_kit::component::{
 };
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+
+static LOGO: LazyLock<Arc<Image>> = LazyLock::new(|| {
+    Arc::new(Image::from_bytes(
+        ImageFormat::Svg,
+        include_bytes!("../../../assets/icon/patchbay-mark.svg").to_vec(),
+    ))
+});
+
+/// The full-color app logo; size it with `size_*`.
+pub fn logo() -> Img {
+    img(LOGO.clone())
+}
 
 pub fn field_row(
     cx: &App,

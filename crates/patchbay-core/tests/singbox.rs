@@ -207,13 +207,13 @@ fn rejects_a_config_without_interface_or_peer_fields() {
 }
 
 #[test]
-fn split_output_matches_typescript() {
+fn split_output_matches_reference() {
     let generated = generate_config(SERVER_CONF, &base()).expect("config");
     assert_eq!(generated, include_str!("fixtures/split.generated.json"));
 }
 
 #[test]
-fn full_output_matches_typescript() {
+fn full_output_matches_reference() {
     let generated = generate_config(MERGED_SERVER_CONF, &full_options()).expect("config");
     assert_eq!(generated, include_str!("fixtures/full.generated.json"));
 }
