@@ -18,5 +18,7 @@ gpui-kit = "=0.7.3"
 # Core-only dependencies.
 anyhow = "=1.0.104"
 nix = { version = "=0.31.3", features = ["process", "signal"] }
+regex-syntax = "=0.8.11"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154", features = ["preserve_order"] }
+uuid = { version = "=1.28.0", features = ["v4"] }

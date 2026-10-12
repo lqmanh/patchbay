@@ -4451,6 +4451,13 @@ dependencies = [
 [[package]]
 name = "patchbay-core"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "regex-syntax",
+ "serde",
+ "serde_json",
+ "uuid",
+]
 
 [[package]]
 name = "patchbay-gui"
