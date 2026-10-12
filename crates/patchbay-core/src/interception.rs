@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use serde_json::Value;
@@ -26,6 +26,13 @@ pub struct InterceptionStatus {
     pub daemon: DaemonStatus,
     pub service: Option<String>,
     pub proxy: Option<SocksState>,
+    pub agent: LaunchdStatus,
+}
+
+impl InterceptionStatus {
+    pub fn intercepting(&self) -> bool {
+        self.proxy.as_ref().is_some_and(|proxy| proxy.enabled)
+    }
 }
 
 pub fn capture_state_before_enable(current: &SocksState, socks_port: u16) -> Option<SocksState> {
@@ -67,11 +74,8 @@ pub fn clear_proxy_state(paths: &Paths) {
     let _ = std::fs::remove_file(paths.proxy_state_file());
 }
 
-pub fn interception_status(
-    paths: &Paths,
-    platform: &impl Platform,
-    agent: Option<LaunchdStatus>,
-) -> InterceptionStatus {
+pub fn interception_status(paths: &Paths, platform: &impl Platform) -> InterceptionStatus {
+    let agent = platform.daemon_agent_status();
     let daemon = daemon_view(paths, platform, agent);
     let service = platform.active_network_service();
     let proxy = service
@@ -81,6 +85,7 @@ pub fn interception_status(
         daemon,
         service,
         proxy,
+        agent,
     }
 }
 
@@ -198,6 +203,15 @@ pub fn intercept_command(cli: &Path) -> Vec<String> {
     command
 }
 
+/// The CLI binary that owns the intercept login item. It ships beside the GUI
+/// executable: `target/debug/patchbay` in development, `Contents/MacOS/patchbay`
+/// inside the app bundle.
+pub fn cli_path() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let candidate = exe.parent()?.join("patchbay");
+    candidate.is_file().then_some(candidate)
+}
+
 pub fn install_intercept_at_login(
     paths: &Paths,
     platform: &impl Platform,
@@ -210,22 +224,12 @@ pub fn uninstall_intercept_at_login(platform: &impl Platform) -> anyhow::Result<
     platform.uninstall_intercept_agent()
 }
 
-fn daemon_view(
-    paths: &Paths,
-    platform: &impl Platform,
-    agent: Option<LaunchdStatus>,
-) -> DaemonStatus {
-    let status = match agent {
-        Some(agent) => Some(agent),
-        None => platform
-            .is_daemon_agent_installed()
-            .then(|| platform.daemon_agent_status()),
-    };
-    match status {
-        Some(status) => match status.pid {
-            Some(pid) if status.running && pid != 0 => DaemonStatus::Running { pid },
-            _ => DaemonStatus::Stopped,
-        },
-        None => daemon::status(paths),
+fn daemon_view(paths: &Paths, platform: &impl Platform, agent: LaunchdStatus) -> DaemonStatus {
+    if !platform.is_daemon_agent_installed() {
+        return daemon::status(paths);
+    }
+    match agent.pid {
+        Some(pid) if agent.running && pid != 0 => DaemonStatus::Running { pid },
+        _ => DaemonStatus::Stopped,
     }
 }

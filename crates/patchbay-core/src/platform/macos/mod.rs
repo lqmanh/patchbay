@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use crate::platform::{LaunchdStatus, Platform, SocksState};
 
+#[derive(Clone)]
 pub struct MacPlatform {
     home: PathBuf,
 }
@@ -21,6 +22,12 @@ impl MacPlatform {
 
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self::new(crate::paths::home_dir()?))
+    }
+
+    pub fn reveal_in_finder(&self, path: &Path) -> anyhow::Result<()> {
+        let path = path.display().to_string();
+        crate::platform::exec::run_checked("open", &[&path])?;
+        Ok(())
     }
 }
 

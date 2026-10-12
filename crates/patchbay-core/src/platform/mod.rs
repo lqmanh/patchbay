@@ -12,7 +12,7 @@ pub struct SocksState {
     pub port: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LaunchdStatus {
     pub installed: bool,
     pub loaded: bool,

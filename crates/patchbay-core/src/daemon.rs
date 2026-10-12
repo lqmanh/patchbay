@@ -5,7 +5,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use nix::errno::Errno;
 use nix::sys::signal::{Signal, kill};
@@ -25,6 +25,19 @@ pub enum DaemonStatus {
     Stopped,
     Running { pid: i32 },
     Stale { pid: i32 },
+}
+
+impl DaemonStatus {
+    pub fn is_running(&self) -> bool {
+        matches!(self, Self::Running { .. })
+    }
+
+    pub fn pid(&self) -> Option<i32> {
+        match self {
+            Self::Running { pid } => Some(*pid),
+            _ => None,
+        }
+    }
 }
 
 pub fn status(paths: &Paths) -> DaemonStatus {
@@ -136,6 +149,11 @@ pub fn wait_for_reachable(port: u16, attempts: u32, delay: Duration) -> bool {
         std::thread::sleep(delay);
     }
     false
+}
+
+pub fn log_stamp(paths: &Paths) -> Option<(u64, SystemTime)> {
+    let metadata = std::fs::metadata(paths.log_file()).ok()?;
+    Some((metadata.len(), metadata.modified().ok()?))
 }
 
 pub fn read_log(paths: &Paths, window_lines: usize, keep_lines: usize) -> Vec<String> {

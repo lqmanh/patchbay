@@ -10,5 +10,6 @@ name = "patchbay-gui"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = { workspace = true }
 gpui-kit = { workspace = true }
 patchbay-core = { path = "../patchbay-core" }
