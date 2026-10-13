@@ -35,6 +35,7 @@ impl Global for Tray {}
 struct Shown {
     glyph: Glyph,
     label: String,
+    port: Option<u16>,
     intercepting: bool,
     busy: bool,
 }
@@ -144,9 +145,19 @@ fn sync(state: &Entity<AppState>, cx: &mut App) {
         (StateKind::On, Some(server)) => format!("{} · {}", kind.label(), server.name),
         _ => kind.label().to_string(),
     };
+    let port = state
+        .status
+        .proxy
+        .as_ref()
+        .and_then(|proxy| proxy.loopback_port());
+    let tooltip = match kind {
+        StateKind::Broken => format!("Patchbay: {}", state.broken_description()),
+        _ => format!("Patchbay: {label}"),
+    };
     let next = Shown {
         glyph,
         label,
+        port,
         intercepting: state.intercepting(),
         busy: state.busy,
     };
@@ -164,9 +175,7 @@ fn sync(state: &Entity<AppState>, cx: &mut App) {
             Err(error) => eprintln!("patchbay: menu bar icon: {error:#}"),
         }
     }
-    let _ = tray
-        .icon
-        .set_tooltip(Some(format!("Patchbay: {}", next.label)));
+    let _ = tray.icon.set_tooltip(Some(tooltip));
     tray.status.set_text(&next.label);
     tray.intercept.set_checked(next.intercepting);
     tray.intercept.set_enabled(!next.busy);

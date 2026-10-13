@@ -1,6 +1,6 @@
 use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, IconName, Sizable, StyledExt as _, button::Button, h_flex,
-    input::Input, select::Select, spinner::Spinner, switch::Switch, v_flex,
+    select::Select, spinner::Spinner, switch::Switch, v_flex,
 };
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -20,6 +20,12 @@ impl AppShell {
         let kind = state.state_kind();
         let tunnel = state.tunnel_label();
         let pid = state.status.daemon.pid();
+        let port = state
+            .status
+            .proxy
+            .as_ref()
+            .and_then(|proxy| proxy.loopback_port());
+        let broken = state.broken_description();
         let intercepting = state.intercepting();
         let busy = state.busy;
         let active = state.active_server().map(|server| server.file.clone());
@@ -52,13 +58,17 @@ impl AppShell {
         let muted = cx.theme().muted_foreground;
         let state_color = kind.color(cx.theme());
         let state_description = match kind {
-            StateKind::On => match pid {
-                Some(pid) => format!("{tunnel} · daemon pid {pid}"),
-                None => tunnel.to_string(),
-            },
-            StateKind::Broken => {
-                "The system proxy points at the tunnel, but the daemon is not running.".to_string()
+            StateKind::On => {
+                let mut description = tunnel.to_string();
+                if let Some(pid) = pid {
+                    description.push_str(&format!(" · daemon pid {pid}"));
+                }
+                if let Some(port) = port {
+                    description.push_str(&format!(" · port {port}"));
+                }
+                description
             }
+            StateKind::Broken => broken,
             StateKind::Off => {
                 "Traffic goes out directly. Turn on interception to route it through the tunnel."
                     .to_string()
@@ -90,12 +100,6 @@ impl AppShell {
             .disabled(busy)
             .w(px(220.));
 
-        let port_description = if intercepting {
-            "Turn off interception to change the port."
-        } else {
-            "Local port the tunnel listens on."
-        };
-
         let restart_control = Button::new("restart-tunnel")
             .outline()
             .icon(IconName::RefreshCw)
@@ -119,7 +123,7 @@ impl AppShell {
                 field_row(
                     cx,
                     "Active server",
-                    "The sing-box config the tunnel runs with.",
+                    "The server config the tunnel connects with.",
                     active_control,
                 )
                 .into_any_element(),
@@ -128,15 +132,6 @@ impl AppShell {
                     "Mode",
                     "Split routes only matched traffic; Full routes all traffic.",
                     mode_control,
-                )
-                .into_any_element(),
-                field_row(
-                    cx,
-                    "SOCKS port",
-                    port_description,
-                    Input::new(&self.port_input)
-                        .disabled(intercepting)
-                        .w(px(120.)),
                 )
                 .into_any_element(),
                 field_row(

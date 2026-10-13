@@ -5,11 +5,19 @@ use std::path::Path;
 
 use serde::Serialize;
 
+pub const LOOPBACK_HOST: &str = "127.0.0.1";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SocksState {
     pub enabled: bool,
     pub host: String,
     pub port: u16,
+}
+
+impl SocksState {
+    pub fn loopback_port(&self) -> Option<u16> {
+        (self.enabled && self.host == LOOPBACK_HOST).then_some(self.port)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

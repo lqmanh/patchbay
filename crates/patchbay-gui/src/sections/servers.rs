@@ -56,7 +56,7 @@ impl AppShell {
             empty_state(
                 IconName::FolderOpen,
                 "No server configs",
-                "Add sing-box .conf files to the servers folder to pick one.",
+                "Add .conf files to the servers folder to pick one.",
                 Some(
                     Button::new("reveal-servers-empty")
                         .outline()

@@ -9,7 +9,7 @@ use crate::engine::TunnelEngine;
 use crate::json::write_json;
 use crate::options::RunOptions;
 use crate::paths::Paths;
-use crate::platform::{LaunchdStatus, Platform, SocksState};
+use crate::platform::{LOOPBACK_HOST, LaunchdStatus, Platform, SocksState};
 
 pub const INTERCEPT_ARGS: [&str; 2] = ["intercept", "on"];
 
@@ -36,12 +36,26 @@ impl InterceptionStatus {
 }
 
 pub fn capture_state_before_enable(current: &SocksState, socks_port: u16) -> Option<SocksState> {
-    let already_ours = current.enabled && current.host == "127.0.0.1" && current.port == socks_port;
-    if already_ours {
+    if current.loopback_port() == Some(socks_port) {
         None
     } else {
         Some(current.clone())
     }
+}
+
+pub fn proxy_port_stale(proxy: &SocksState, socks_port: u16) -> bool {
+    proxy.loopback_port().is_some_and(|port| port != socks_port)
+}
+
+pub fn sync_proxy_port(platform: &impl Platform, socks_port: u16) -> anyhow::Result<()> {
+    let Some(service) = platform.active_network_service() else {
+        return Ok(());
+    };
+    let current = platform.socks_proxy(&service);
+    if proxy_port_stale(&current, socks_port) {
+        platform.set_socks_proxy(&service, LOOPBACK_HOST, socks_port)?;
+    }
+    Ok(())
 }
 
 pub fn save_proxy_state(paths: &Paths, state: &SavedProxyState) -> anyhow::Result<()> {
@@ -137,7 +151,7 @@ pub fn enable_interception(
         )?;
     }
 
-    platform.set_socks_proxy(&service, "127.0.0.1", options.engine.socks_port)?;
+    platform.set_socks_proxy(&service, LOOPBACK_HOST, options.engine.socks_port)?;
     Ok(())
 }
 
@@ -175,7 +189,7 @@ pub fn restart_service(
     } else {
         daemon::restart(paths, engine, options)?;
     }
-    Ok(())
+    sync_proxy_port(platform, options.engine.socks_port)
 }
 
 pub fn install_launch_at_login(

@@ -23,6 +23,7 @@ pub struct AppConfig {
 }
 
 pub const DEFAULT_SOCKS_PORT: u16 = 25344;
+pub const MIN_SOCKS_PORT: u16 = 1024;
 pub const DEFAULT_THEME: &str = "system";
 
 pub fn default_config() -> AppConfig {
@@ -35,8 +36,16 @@ pub fn default_config() -> AppConfig {
     }
 }
 
+pub fn parse_port_input(text: &str) -> Option<u16> {
+    text.trim().parse::<u16>().ok()
+}
+
 pub fn parse_port_text(text: &str) -> Option<u16> {
-    text.trim().parse::<u16>().ok().filter(|port| *port > 0)
+    parse_port_input(text).filter(|port| is_user_port(*port))
+}
+
+fn is_user_port(port: u16) -> bool {
+    port >= MIN_SOCKS_PORT
 }
 
 pub(crate) fn parse_port(value: &Value) -> Option<u16> {
@@ -53,7 +62,11 @@ pub fn sanitize_config(input: &Value) -> AppConfig {
         return default_config();
     };
     let mut config = default_config();
-    if let Some(port) = raw.get("socksPort").and_then(parse_port) {
+    if let Some(port) = raw
+        .get("socksPort")
+        .and_then(parse_port)
+        .filter(|port| is_user_port(*port))
+    {
         config.socks_port = port;
     }
     if raw.get("mode").and_then(Value::as_str) == Some("full") {

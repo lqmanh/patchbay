@@ -1,9 +1,10 @@
+use std::cell::RefCell;
 use std::path::Path;
 
 use patchbay_core::daemon::DaemonStatus;
 use patchbay_core::interception::{
     SavedProxyState, capture_state_before_enable, clear_proxy_state, interception_status,
-    load_proxy_state, save_proxy_state,
+    load_proxy_state, save_proxy_state, sync_proxy_port,
 };
 use patchbay_core::paths::Paths;
 use patchbay_core::platform::{LaunchdStatus, Platform, SocksState};
@@ -42,6 +43,75 @@ fn captures_disabled_and_foreign_proxy_states() {
 }
 
 #[test]
+fn sync_repoints_an_enabled_loopback_proxy() {
+    let platform = FakePlatform {
+        service: Some("Wi-Fi".into()),
+        proxy: SocksState {
+            enabled: true,
+            host: "127.0.0.1".into(),
+            port: 25344,
+        },
+        ..FakePlatform::new()
+    };
+
+    sync_proxy_port(&platform, 26000).expect("sync");
+
+    let calls = platform.set_calls.borrow();
+    assert_eq!(
+        calls.as_slice(),
+        [("Wi-Fi".to_string(), "127.0.0.1".to_string(), 26000)]
+    );
+}
+
+#[test]
+fn sync_leaves_foreign_or_current_state_alone() {
+    let untouched = [
+        (
+            None,
+            SocksState {
+                enabled: true,
+                host: "127.0.0.1".into(),
+                port: 25344,
+            },
+        ),
+        (
+            Some("Wi-Fi".into()),
+            SocksState {
+                enabled: false,
+                host: String::new(),
+                port: 0,
+            },
+        ),
+        (
+            Some("Wi-Fi".into()),
+            SocksState {
+                enabled: true,
+                host: "10.0.0.1".into(),
+                port: 1080,
+            },
+        ),
+        (
+            Some("Wi-Fi".into()),
+            SocksState {
+                enabled: true,
+                host: "127.0.0.1".into(),
+                port: 25344,
+            },
+        ),
+    ];
+
+    for (service, proxy) in untouched {
+        let platform = FakePlatform {
+            service,
+            proxy,
+            ..FakePlatform::new()
+        };
+        sync_proxy_port(&platform, 25344).expect("sync");
+        assert!(platform.set_calls.borrow().is_empty());
+    }
+}
+
+#[test]
 fn round_trips_saved_state() {
     let dir = tempfile::tempdir().expect("tempdir");
     let paths = test_paths(&dir);
@@ -66,10 +136,7 @@ fn daemon_status_comes_from_the_pid_file_without_a_launch_agent() {
     let pid = std::process::id() as i32;
     std::fs::write(paths.pid_file(), pid.to_string()).expect("pid file");
 
-    let platform = FakePlatform {
-        agent_installed: false,
-        agent: LaunchdStatus::default(),
-    };
+    let platform = FakePlatform::new();
     let status = interception_status(&paths, &platform);
     assert_eq!(status.daemon, DaemonStatus::Running { pid });
 }
@@ -82,7 +149,7 @@ fn daemon_status_comes_from_the_launch_agent_when_installed() {
 
     let platform = FakePlatform {
         agent_installed: true,
-        agent: LaunchdStatus::default(),
+        ..FakePlatform::new()
     };
     let status = interception_status(&paths, &platform);
     assert_eq!(status.daemon, DaemonStatus::Stopped);
@@ -95,6 +162,7 @@ fn daemon_status_comes_from_the_launch_agent_when_installed() {
             running: true,
             pid: Some(4242),
         },
+        ..FakePlatform::new()
     };
     let status = interception_status(&paths, &platform);
     assert_eq!(status.daemon, DaemonStatus::Running { pid: 4242 });
@@ -112,22 +180,40 @@ fn test_paths(dir: &tempfile::TempDir) -> Paths {
 struct FakePlatform {
     agent_installed: bool,
     agent: LaunchdStatus,
+    service: Option<String>,
+    proxy: SocksState,
+    set_calls: RefCell<Vec<(String, String, u16)>>,
+}
+
+impl FakePlatform {
+    fn new() -> Self {
+        Self {
+            agent_installed: false,
+            agent: LaunchdStatus::default(),
+            service: None,
+            proxy: SocksState {
+                enabled: false,
+                host: String::new(),
+                port: 0,
+            },
+            set_calls: RefCell::new(Vec::new()),
+        }
+    }
 }
 
 impl Platform for FakePlatform {
     fn active_network_service(&self) -> Option<String> {
-        None
+        self.service.clone()
     }
 
     fn socks_proxy(&self, _service: &str) -> SocksState {
-        SocksState {
-            enabled: false,
-            host: String::new(),
-            port: 0,
-        }
+        self.proxy.clone()
     }
 
-    fn set_socks_proxy(&self, _service: &str, _host: &str, _port: u16) -> anyhow::Result<()> {
+    fn set_socks_proxy(&self, service: &str, host: &str, port: u16) -> anyhow::Result<()> {
+        self.set_calls
+            .borrow_mut()
+            .push((service.to_string(), host.to_string(), port));
         Ok(())
     }
 

@@ -1,6 +1,9 @@
-use gpui_kit::component::{Disableable, select::Select, switch::Switch, v_flex};
+use gpui_kit::component::{Disableable, input::Input, select::Select, switch::Switch, v_flex};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+
+use patchbay_core::config::MIN_SOCKS_PORT;
+use patchbay_core::interception;
 
 use crate::app::AppShell;
 use crate::widgets::{field_row, group_box, group_title, page_body, separated_rows};
@@ -14,6 +17,10 @@ impl AppShell {
         let agent = state.status.agent;
         let intercept_agent = state.intercept_agent;
         let busy = state.busy;
+        let port_pending =
+            state.status.proxy.as_ref().is_some_and(|proxy| {
+                interception::proxy_port_stale(proxy, state.config.socks_port)
+            });
 
         let launch_description = if agent.installed {
             match (agent.running, agent.pid) {
@@ -45,6 +52,25 @@ impl AppShell {
             .disabled(busy)
             .w(px(140.));
 
+        let port_description = if port_pending {
+            "Restart to apply the new port.".to_string()
+        } else {
+            format!(
+                "Local port the tunnel listens on ({MIN_SOCKS_PORT}–{}).",
+                u16::MAX
+            )
+        };
+
+        let tunnel_rows = vec![
+            field_row(
+                cx,
+                "SOCKS port",
+                port_description,
+                Input::new(&self.port_input).w(px(120.)),
+            )
+            .into_any_element(),
+        ];
+
         let startup_rows = separated_rows(
             cx,
             vec![
@@ -73,23 +99,24 @@ impl AppShell {
             ],
         );
 
+        let group = |title: &'static str, rows: Vec<AnyElement>| {
+            v_flex()
+                .w_full()
+                .child(group_title(cx, title))
+                .child(group_box(cx, rows))
+                .into_any_element()
+        };
+
         self.page(
             "Settings",
-            "Startup and appearance",
+            "Startup, tunnel, and appearance",
             div(),
             page_body(
                 "settings-scroll",
                 [
-                    v_flex()
-                        .w_full()
-                        .child(group_title(cx, "Startup"))
-                        .child(group_box(cx, startup_rows))
-                        .into_any_element(),
-                    v_flex()
-                        .w_full()
-                        .child(group_title(cx, "Appearance"))
-                        .child(group_box(cx, appearance_rows))
-                        .into_any_element(),
+                    group("Startup", startup_rows),
+                    group("Tunnel", tunnel_rows),
+                    group("Appearance", appearance_rows),
                 ],
             ),
             cx,

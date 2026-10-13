@@ -73,7 +73,9 @@ impl AppShell {
             InputState::new(window, cx)
                 .default_value(port.to_string())
                 .placeholder(DEFAULT_SOCKS_PORT.to_string())
-                .validate(|text, _| text.is_empty() || config::parse_port_text(text).is_some())
+                // Commit applies the 1024 floor; validating it per keystroke
+                // would reject every intermediate prefix while typing.
+                .validate(|text, _| text.is_empty() || config::parse_port_input(text).is_some())
         });
 
         let port_input_subscription = cx.subscribe_in(

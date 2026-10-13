@@ -1,4 +1,4 @@
-use patchbay_core::config::{AppConfig, Mode, default_config, sanitize_config};
+use patchbay_core::config::{AppConfig, Mode, default_config, parse_port_text, sanitize_config};
 use patchbay_core::domains::RuleKind;
 use serde_json::json;
 
@@ -6,6 +6,10 @@ use serde_json::json;
 fn sanitize_falls_back_to_defaults() {
     assert_eq!(sanitize_config(&json!(null)), default_config());
     assert_eq!(sanitize_config(&json!("nope")), default_config());
+    assert_eq!(
+        sanitize_config(&json!({ "socksPort": 80 })),
+        default_config()
+    );
 }
 
 #[test]
@@ -55,4 +59,19 @@ fn sanitize_keeps_valid_values() {
             ..default_config()
         }
     );
+}
+
+#[test]
+fn parse_port_text_rejects_privileged_and_invalid_ports() {
+    for text in ["", "0", "22", "80", "443", "1023", "65536", "nope"] {
+        assert_eq!(parse_port_text(text), None, "{text:?}");
+    }
+}
+
+#[test]
+fn parse_port_text_accepts_user_ports() {
+    assert_eq!(parse_port_text("1024"), Some(1024));
+    assert_eq!(parse_port_text("25344"), Some(25344));
+    assert_eq!(parse_port_text("65535"), Some(65535));
+    assert_eq!(parse_port_text(" 8080 "), Some(8080));
 }

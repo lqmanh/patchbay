@@ -76,7 +76,7 @@ impl AppShell {
                 .into_any_element()
         };
 
-        self.page("Log", "Output from the sing-box daemon", actions, body, cx)
+        self.page("Log", "Output from the tunnel daemon", actions, body, cx)
     }
 }
 

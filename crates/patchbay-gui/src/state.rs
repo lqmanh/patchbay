@@ -187,6 +187,22 @@ impl AppState {
         }
     }
 
+    pub fn broken_description(&self) -> String {
+        match self
+            .status
+            .proxy
+            .as_ref()
+            .and_then(|proxy| proxy.loopback_port())
+        {
+            Some(port) => {
+                format!("The system proxy points at port {port}, but the daemon is not running.")
+            }
+            None => {
+                "The system proxy points at the tunnel, but the daemon is not running.".to_string()
+            }
+        }
+    }
+
     pub fn active_server(&self) -> Option<&Server> {
         servers::pick_server(&self.servers, self.config.active_server.as_deref())
     }
@@ -379,10 +395,17 @@ impl AppState {
     }
 
     pub fn set_socks_port(&mut self, port: u16, cx: &mut Context<Self>) {
-        if self.intercepting() || port == self.config.socks_port {
+        if port == self.config.socks_port {
             return;
         }
-        self.mutate_and_apply(cx, move |config| config.socks_port = port);
+        self.config.socks_port = port;
+        if self.intercepting() {
+            // Interception keeps the old port until the tunnel is restarted.
+            self.save_config_only(cx);
+            return;
+        }
+        let restart_daemon = self.running();
+        self.save_and_apply(cx, restart_daemon);
     }
 
     pub fn toggle_launch_at_login(&mut self, cx: &mut Context<Self>) {
@@ -475,13 +498,28 @@ impl AppState {
 
     fn mutate_and_apply(&mut self, cx: &mut Context<Self>, mutate: impl FnOnce(&mut AppConfig)) {
         mutate(&mut self.config);
-        let restart = self.running();
+        let restart_daemon = self.running();
+        self.save_and_apply(cx, restart_daemon);
+    }
+
+    fn save_config_only(&mut self, cx: &mut Context<Self>) {
         let snapshot = self.snapshot();
         spawn_task(
             cx,
             move || {
                 let _ = config::save_config(&snapshot.paths, &snapshot.config);
-                if restart
+            },
+            |_, _, cx| cx.notify(),
+        );
+    }
+
+    fn save_and_apply(&mut self, cx: &mut Context<Self>, restart_daemon: bool) {
+        let snapshot = self.snapshot();
+        spawn_task(
+            cx,
+            move || {
+                let _ = config::save_config(&snapshot.paths, &snapshot.config);
+                if restart_daemon
                     && let Some(options) =
                         options::build_run_options(&snapshot.config, &snapshot.servers)
                 {
@@ -518,21 +556,27 @@ fn status_snapshot(snapshot: &Snapshot, heal: bool) -> StatusSnapshot {
     if heal && is_broken(&status) {
         let healed = options::build_run_options(&snapshot.config, &snapshot.servers).is_some_and(
             |options| {
-                let ok = interception::ensure_daemon(
+                if interception::ensure_daemon(
                     &snapshot.paths,
                     &snapshot.platform,
                     &Singbox,
                     &options,
                 )
-                .is_ok();
-                if ok {
-                    daemon::wait_for_reachable(
+                .is_err()
+                {
+                    return false;
+                }
+                if daemon::wait_for_reachable(
+                    options.engine.socks_port,
+                    8,
+                    Duration::from_millis(250),
+                ) {
+                    let _ = interception::sync_proxy_port(
+                        &snapshot.platform,
                         options.engine.socks_port,
-                        8,
-                        Duration::from_millis(250),
                     );
                 }
-                ok
+                true
             },
         );
         if !healed {
@@ -541,10 +585,15 @@ fn status_snapshot(snapshot: &Snapshot, heal: bool) -> StatusSnapshot {
         status = interception::interception_status(&snapshot.paths, &snapshot.platform);
     }
 
+    let active_port = status
+        .proxy
+        .as_ref()
+        .and_then(|proxy| proxy.loopback_port())
+        .unwrap_or(snapshot.config.socks_port);
     let ready = status
         .daemon
         .is_running()
-        .then(|| daemon::is_reachable(snapshot.config.socks_port));
+        .then(|| daemon::is_reachable(active_port));
     StatusSnapshot {
         servers: servers::list_servers(&snapshot.paths),
         intercept_agent: snapshot.platform.is_intercept_agent_installed(),

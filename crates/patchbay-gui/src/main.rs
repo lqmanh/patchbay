@@ -45,6 +45,7 @@ actions!(
         ToggleInterception,
         RestartTunnel,
         HideApp,
+        HideOthers,
         MinimizeWindow,
         CloseWindow,
     ]
@@ -180,6 +181,7 @@ fn save_frame(layout: &ShellLayout, cx: &App) {
 fn register_actions(cx: &mut App, state: Entity<AppState>) {
     cx.on_action(|_: &Quit, cx: &mut App| cx.quit());
     cx.on_action(|_: &HideApp, cx: &mut App| cx.hide());
+    cx.on_action(|_: &HideOthers, cx: &mut App| cx.hide_other_apps());
     cx.on_action(|_: &MinimizeWindow, cx: &mut App| {
         with_main_window(cx, |window, _| window.minimize_window());
     });
@@ -271,6 +273,7 @@ fn register_menus(cx: &mut App) {
         KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("cmd-,", OpenSettings, None),
         KeyBinding::new("cmd-h", HideApp, None),
+        KeyBinding::new("cmd-alt-h", HideOthers, None),
         KeyBinding::new("cmd-m", MinimizeWindow, None),
         KeyBinding::new("cmd-w", CloseWindow, None),
         KeyBinding::new("cmd-r", RestartTunnel, None),
@@ -283,6 +286,7 @@ fn register_menus(cx: &mut App) {
             MenuItem::action("Settings…", OpenSettings),
             MenuItem::separator(),
             MenuItem::action("Hide Patchbay", HideApp),
+            MenuItem::action("Hide Others", HideOthers),
             MenuItem::separator(),
             MenuItem::action("Quit Patchbay", Quit),
         ]),
