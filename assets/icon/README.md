@@ -18,6 +18,7 @@ The three SVGs share the `#artwork` group verbatim; change it in all of them.
 - The VPN cable is always on top and the most saturated element; the direct cable stays muted.
 - Flat shapes, with soft gradients only on the cables. No glass, highlights or bevels, and no small-size or Dark/Clear/Tinted variants.
 - The crossing gap is a mask on the direct cable (`#vpn-gap`), not paint, so it works on any background.
+- Plugs are solid discs, the same size as the sockets.
 
 ### Palette
 
@@ -26,7 +27,6 @@ Tile `#ecdcc9`, jack `#f8efe4`, socket `#3a2c20`. Tile shadow (master only): bla
 |                                     | Direct                | VPN                   |
 | ----------------------------------- | --------------------- | --------------------- |
 | Cable gradient (plugs use its ends) | `#8f7964` → `#685341` | `#ff903f` → `#ec4826` |
-| Plug center                         | `#ead9c6`             | `#ffe3d1`             |
 | Shadow (22%, 1.2 down, blur 1)      | `#3a2614`             | `#b4410c`             |
 
 ### Geometry
@@ -36,9 +36,9 @@ In the 160-unit design grid:
 - **Canvas:** the tile spans 824 px centered on 1024 px (100 px margin), per Apple's macOS icon grid.
 - **Tile:** continuous-corner square, radius 36 (22.5%), 60% corner smoothing (as in Figma).
 - **Artwork:** scaled 1.1× around the tile center (`matrix(1.1 0 0 1.1 -8 -8)`).
-- **Jacks:** 3 × 2 at x = 40, 80, 120 and y = 56, 104. Radius 12, socket 6 (gaps 16 across, 24 down).
-- **Cables:** 8 wide, round caps. Plug radius 9, center 3.6. Direct `M80 56 V104`, VPN `M40 56 C40 88 120 72 120 104`.
-- **Crossing gap:** 16 wide along the VPN path.
+- **Jacks:** 3 × 2 at x = 40, 80, 120 and y = 56, 104. Radius 12 (gaps 16 across, 24 down).
+- **Cables:** 8 wide, round caps. Plugs and sockets radius 8, equal to the cable width, leaving a 4-wide jack ring. Direct `M80 56 V104`, VPN `M40 56 C40 96 120 64 120 104`.
+- **Crossing gap:** 16 wide along the VPN path, leaving 4 clear on each side of the VPN cable, the same as the jack ring.
 
 ## Menu bar icon
 
@@ -65,12 +65,14 @@ In points on a 22 × 16 canvas (menu bar items get at most 22 pt of the 24 pt me
 
 - **Pixel grid:** keep jack centers on whole points and jacks 4 pt across, so edges land on whole pixels at @1x and @2x.
 - **Jacks:** 3 × 2 at x = 3, 10, 17 and y = 4, 12. Plug radius 2; empty ring radius 1.5, stroke 1.
-- **Cables:** 1.5 wide. Direct `M10 4 V12`, VPN `M3 4 C3 9.33 17 6.67 17 12` (the app icon's curve, scaled).
+- **Cables:** 1.5 wide. Direct `M10 4 V12`, VPN `M3 4 C3 10.67 17 5.33 17 12` (the app icon's curve, scaled).
 - **Warning badge:** on the VPN cable's end jack. Triangle `M17 8.6 L20.6 15 H13.4 Z`, 0.8 round-joined stroke, 1.3 transparent clear space; the "!" (0.9 × 2.5 bar, 0.5-radius dot) is cut out.
 
 GPUI has no status item API; showing these needs the `tray-icon` crate or `NSStatusItem` via `objc2`.
 
 ## Export
+
+The exports are committed so builds don't need these tools. Re-run `./build.sh` after editing any SVG and commit the outputs with it.
 
 ```sh
 cargo install resvg   # once; the same renderer GPUI uses

@@ -17,7 +17,7 @@
     </filter>
     <mask id="vpn-gap" maskUnits="userSpaceOnUse" x="0" y="0" width="160" height="160">
       <rect width="160" height="160" fill="#ffffff"/>
-      <path d="M40 56 C40 88 120 72 120 104" fill="none" stroke="#000000" stroke-width="16" stroke-linecap="round"/>
+      <path d="M40 56 C40 96 120 64 120 104" fill="none" stroke="#000000" stroke-width="16" stroke-linecap="round"/>
     </mask>
   </defs>
   <path id="tile" fill="#ecdcc9" d="M102.4 0 c20.16 0 30.24 0 37.94 3.92 a36 36 0 0 1 15.73 15.73 c3.92 7.7 3.92 17.78 3.92 37.94 L160 102.4 c0 20.16 0 30.24 -3.92 37.94 a36 36 0 0 1 -15.73 15.73 c-7.7 3.92 -17.78 3.92 -37.94 3.92 L57.6 160 c-20.16 0 -30.24 0 -37.94 -3.92 a36 36 0 0 1 -15.73 -15.73 c-3.92 -7.7 -3.92 -17.78 -3.92 -37.94 L0 57.6 c0 -20.16 0 -30.24 3.92 -37.94 a36 36 0 0 1 15.73 -15.73 c7.7 -3.92 17.78 -3.92 37.94 -3.92 Z"/>
@@ -31,26 +31,22 @@
       <circle cx="120" cy="104" r="12"/>
     </g>
     <g id="sockets" fill="#3a2c20">
-      <circle cx="40" cy="56" r="6"/>
-      <circle cx="80" cy="56" r="6"/>
-      <circle cx="120" cy="56" r="6"/>
-      <circle cx="40" cy="104" r="6"/>
-      <circle cx="80" cy="104" r="6"/>
-      <circle cx="120" cy="104" r="6"/>
+      <circle cx="40" cy="56" r="8"/>
+      <circle cx="80" cy="56" r="8"/>
+      <circle cx="120" cy="56" r="8"/>
+      <circle cx="40" cy="104" r="8"/>
+      <circle cx="80" cy="104" r="8"/>
+      <circle cx="120" cy="104" r="8"/>
     </g>
     <g id="cable-direct" mask="url(#vpn-gap)">
       <path d="M80 56 V104" fill="none" stroke="url(#direct-gradient)" stroke-width="8" stroke-linecap="round" filter="url(#direct-shadow)"/>
-      <circle cx="80" cy="56" r="9" fill="#8f7964"/>
-      <circle cx="80" cy="56" r="3.6" fill="#ead9c6"/>
-      <circle cx="80" cy="104" r="9" fill="#685341"/>
-      <circle cx="80" cy="104" r="3.6" fill="#ead9c6"/>
+      <circle cx="80" cy="56" r="8" fill="#8f7964"/>
+      <circle cx="80" cy="104" r="8" fill="#685341"/>
     </g>
     <g id="cable-vpn">
-      <path d="M40 56 C40 88 120 72 120 104" fill="none" stroke="url(#vpn-gradient)" stroke-width="8" stroke-linecap="round" filter="url(#vpn-shadow)"/>
-      <circle cx="40" cy="56" r="9" fill="#ff903f"/>
-      <circle cx="40" cy="56" r="3.6" fill="#ffe3d1"/>
-      <circle cx="120" cy="104" r="9" fill="#ec4826"/>
-      <circle cx="120" cy="104" r="3.6" fill="#ffe3d1"/>
+      <path d="M40 56 C40 96 120 64 120 104" fill="none" stroke="url(#vpn-gradient)" stroke-width="8" stroke-linecap="round" filter="url(#vpn-shadow)"/>
+      <circle cx="40" cy="56" r="8" fill="#ff903f"/>
+      <circle cx="120" cy="104" r="8" fill="#ec4826"/>
     </g>
   </g>
 </svg>
