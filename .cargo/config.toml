@@ -1,0 +1,4 @@
+[env]
+# The minimum macOS (Rust defaults to 11.0), for every build so tests and local
+# builds match the bundle. Keep in sync with scripts/bundle.sh.
+MACOSX_DEPLOYMENT_TARGET = "26.0"

@@ -8,10 +8,15 @@
 
 ## Features
 
+TBD
+
 ## Installation
+
+Download the latest `Patchbay-<version>.dmg` from [Releases](https://github.com/lqmanh/patchbay/releases/latest), open it, and drag `Patchbay` into `Applications`. Builds are not notarized yet, so macOS blocks the first launch: open System Settings → Privacy & Security and click Open Anyway (or run `xattr -dr com.apple.quarantine /Applications/Patchbay.app`).
 
 ### Requirements
 
+- macOS 26 or later on Apple Silicon
 - [sing-box](https://github.com/SagerNet/sing-box) — `brew install sing-box`
 - WireGuard credential files from your VPN provider (e.g. MEGA VPN `.conf`) in `~/.config/patchbay/servers/`
 
@@ -35,13 +40,13 @@ Keep the browser's proxy setting on "Use system proxy settings" (the default); "
 
 ## Development
 
-Rust 1.98.1, pinned in `rust-toolchain.toml`.
-
 ```sh
 cargo run -p patchbay-gui                       # desktop app
 cargo run -p patchbay-cli -- intercept on|off   # headless control (also used by the login agent)
 cargo run -p patchbay-cli -- smoke [server]     # start sing-box, verify the tunnel, stop it
 cargo test --workspace                          # unit tests
+scripts/bundle.sh                               # build dist/Patchbay.app
+scripts/dmg.sh                                  # package it as dist/Patchbay-<version>.dmg
 ```
 
 ## Credits

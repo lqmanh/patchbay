@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use crate::platform::LaunchdStatus;
 use crate::platform::exec::{run, run_checked};
 
-const DAEMON_LABEL: &str = "dev.patchbay.daemon";
-const INTERCEPT_LABEL: &str = "dev.patchbay.intercept";
+const DAEMON_LABEL: &str = "io.github.lqmanh.patchbay.daemon";
+const INTERCEPT_LABEL: &str = "io.github.lqmanh.patchbay.intercept";
 
 pub fn launch_agent_path(home: &Path) -> PathBuf {
     agent_path(home, DAEMON_LABEL)

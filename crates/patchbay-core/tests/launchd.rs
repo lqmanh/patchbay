@@ -8,7 +8,7 @@ use patchbay_core::platform::macos::{
 fn lives_in_the_users_launch_agents_directory() {
     assert_eq!(
         launch_agent_path(Path::new("/Users/test")),
-        PathBuf::from("/Users/test/Library/LaunchAgents/dev.patchbay.daemon.plist")
+        PathBuf::from("/Users/test/Library/LaunchAgents/io.github.lqmanh.patchbay.daemon.plist")
     );
 }
 
@@ -26,7 +26,7 @@ fn builds_a_keep_alive_plist_with_the_sing_box_arguments() {
         Path::new("/Users/me/.local/state/patchbay/daemon.log"),
     );
 
-    assert!(plist.contains("<string>dev.patchbay.daemon</string>"));
+    assert!(plist.contains("<string>io.github.lqmanh.patchbay.daemon</string>"));
     assert!(plist.contains("<key>KeepAlive</key>"));
     assert!(plist.contains("<key>RunAtLoad</key>"));
     assert!(plist.contains("<string>/opt/homebrew/bin/sing-box</string>"));
@@ -61,7 +61,7 @@ fn builds_a_one_shot_intercept_plist() {
     ];
     let plist = build_intercept_agent_plist(&command, Path::new("/tmp/intercept.log"));
 
-    assert!(plist.contains("<string>dev.patchbay.intercept</string>"));
+    assert!(plist.contains("<string>io.github.lqmanh.patchbay.intercept</string>"));
     assert!(plist.contains("<string>intercept</string>"));
     assert!(plist.contains("<string>on</string>"));
     assert!(plist.contains("<key>RunAtLoad</key>"));
@@ -69,6 +69,6 @@ fn builds_a_one_shot_intercept_plist() {
     assert!(
         intercept_agent_path(Path::new("/Users/test"))
             .to_string_lossy()
-            .contains("dev.patchbay.intercept.plist")
+            .contains("io.github.lqmanh.patchbay.intercept.plist")
     );
 }

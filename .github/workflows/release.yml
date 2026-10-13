@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: macos-26
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Check that CI passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          passed="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" --status success --limit 1 --json databaseId --jq length)"
+          if [ "$passed" = 0 ]; then
+            echo "CI has not passed on $GITHUB_SHA"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          # Build scripts run in this job; keep the write token out of .git/config.
+          persist-credentials: false
+
+      - name: Check the version
+        id: version
+        run: |
+          version="$(awk -F'"' '/^version = / { print $2; exit }' Cargo.toml)"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match the Cargo.toml version v$version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Tags can only restore main's cache; a dry run on main warms it.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Bundle
+        run: scripts/bundle.sh
+
+      - name: Package
+        run: scripts/dmg.sh
+
+      - name: Upload the dry-run artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Patchbay-${{ steps.version.outputs.version }}
+          path: dist/Patchbay-${{ steps.version.outputs.version }}.dmg
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "dist/Patchbay-${{ steps.version.outputs.version }}.dmg" --generate-notes
