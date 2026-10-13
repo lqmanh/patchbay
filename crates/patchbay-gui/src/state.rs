@@ -120,6 +120,8 @@ pub struct AppState {
     pub ready: Option<bool>,
     pub busy: bool,
     log_stamp: Option<(u64, SystemTime)>,
+    log_polling: bool,
+    log_poll_task: Option<Task<()>>,
     refresh_in_flight: bool,
     refresh_pending: bool,
 }
@@ -145,6 +147,8 @@ impl AppState {
             ready: None,
             busy: false,
             log_stamp: None,
+            log_polling: true,
+            log_poll_task: None,
             refresh_in_flight: false,
             refresh_pending: false,
         })
@@ -191,8 +195,31 @@ impl AppState {
         self.refresh_log(cx);
         self.refresh_status_inner(cx, true);
 
-        poll_every(cx, STATUS_POLL_INTERVAL, |this, cx| this.refresh_status(cx));
-        poll_every(cx, LOG_POLL_INTERVAL, |this, cx| this.refresh_log(cx));
+        poll_every(cx, STATUS_POLL_INTERVAL, |this, cx| this.refresh_status(cx)).detach();
+        self.start_log_poll(cx);
+    }
+
+    /// Only a window shows the log, so while none is open, stop polling it
+    /// and drop the lines.
+    pub fn set_log_polling(&mut self, polling: bool, cx: &mut Context<Self>) {
+        if self.log_polling == polling {
+            return;
+        }
+        self.log_polling = polling;
+        if polling {
+            self.start_log_poll(cx);
+            self.refresh_log(cx);
+        } else {
+            self.log_poll_task = None;
+            self.log_lines = Vec::new();
+            self.log_stamp = None;
+        }
+    }
+
+    fn start_log_poll(&mut self, cx: &mut Context<Self>) {
+        self.log_poll_task = Some(poll_every(cx, LOG_POLL_INTERVAL, |this, cx| {
+            this.refresh_log(cx);
+        }));
     }
 
     pub fn refresh_status(&mut self, cx: &mut Context<Self>) {
@@ -246,7 +273,7 @@ impl AppState {
                 ))
             },
             |this, result, cx| {
-                let Some((stamp, lines)) = result else {
+                let Some((stamp, lines)) = result.filter(|_| this.log_polling) else {
                     return;
                 };
                 this.log_stamp = stamp;
@@ -530,7 +557,7 @@ fn poll_every(
     cx: &mut Context<AppState>,
     interval: Duration,
     mut tick: impl FnMut(&mut AppState, &mut Context<AppState>) + 'static,
-) {
+) -> Task<()> {
     cx.spawn(async move |this, cx| {
         loop {
             cx.background_executor().timer(interval).await;
@@ -539,7 +566,6 @@ fn poll_every(
             }
         }
     })
-    .detach();
 }
 
 fn spawn_task<R, W, D>(cx: &mut Context<AppState>, work: W, done: D)

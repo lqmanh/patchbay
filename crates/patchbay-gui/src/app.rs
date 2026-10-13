@@ -13,11 +13,13 @@ use gpui_kit::*;
 
 use patchbay_core::config::{self, DEFAULT_SOCKS_PORT};
 
+use crate::frame::WindowFrame;
 use crate::selects::{ModeItem, ServerItem, ThemeItem, mode_items, theme_items};
 use crate::state::{AppState, ThemePref};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Section {
+    #[default]
     Status,
     Servers,
     Rules,
@@ -25,10 +27,20 @@ pub enum Section {
     Settings,
 }
 
+/// The window and shell state kept while the window is closed, to restore on reopen.
+#[derive(Debug, Clone, Default)]
+pub struct ShellLayout {
+    pub section: Section,
+    pub collapsed: bool,
+    /// `None` opens the window centered.
+    pub frame: Option<WindowFrame>,
+}
+
 pub struct AppShell {
     pub(crate) state: Entity<AppState>,
     pub(crate) section: Section,
     pub(crate) collapsed: bool,
+    frame: Option<WindowFrame>,
     pub(crate) log_follow: bool,
     pub(crate) log_sizes: Rc<Vec<Size<Pixels>>>,
     pub(crate) log_scroll: VirtualListScrollHandle,
@@ -45,10 +57,17 @@ pub struct AppShell {
     _theme_select: Subscription,
     _state: Subscription,
     _appearance: Subscription,
+    _bounds: Subscription,
+    _display: Subscription,
 }
 
 impl AppShell {
-    pub fn new(state: Entity<AppState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        state: Entity<AppState>,
+        layout: ShellLayout,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let port = state.read(cx).config.socks_port;
         let port_input = cx.new(|cx| {
             InputState::new(window, cx)
@@ -123,10 +142,14 @@ impl AppShell {
             }
         });
 
+        let bounds = cx.observe_window_bounds(window, Self::track_bounds);
+        let display = cx.observe_window_display(window, Self::track_display);
+
         Self {
             state,
-            section: Section::Status,
-            collapsed: false,
+            section: layout.section,
+            collapsed: layout.collapsed,
+            frame: WindowFrame::of(window, cx).or(layout.frame),
             log_follow: true,
             log_sizes: Rc::new(Vec::new()),
             log_scroll: VirtualListScrollHandle::new(),
@@ -143,6 +166,28 @@ impl AppShell {
             _theme_select: theme_subscription,
             _state: state_subscription,
             _appearance: appearance,
+            _bounds: bounds,
+            _display: display,
+        }
+    }
+
+    pub fn layout(&self) -> ShellLayout {
+        ShellLayout {
+            section: self.section,
+            collapsed: self.collapsed,
+            frame: self.frame.clone(),
+        }
+    }
+
+    fn track_bounds(&mut self, window: &mut Window, _: &mut Context<Self>) {
+        if let Some(frame) = &mut self.frame {
+            frame.set_bounds(window.window_bounds());
+        }
+    }
+
+    fn track_display(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(frame) = WindowFrame::of(window, cx) {
+            self.frame = Some(frame);
         }
     }
 

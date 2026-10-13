@@ -15,14 +15,20 @@ license = "MIT"
 [workspace.dependencies]
 gpui-kit = "=0.7.3"
 
+# GUI-only dependencies.
+png = "=0.18.1"
+tray-icon = { version = "=0.26.1", default-features = false }
+
 # Core-only dependencies.
-anyhow = "=1.0.104"
 nix = { version = "=0.31.3", features = ["process", "signal", "user"] }
 regex-syntax = "=0.8.11"
+uuid = { version = "=1.28.0", features = ["v4"] }
+
+# Shared dependencies.
+anyhow = "=1.0.104"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154", features = ["preserve_order"] }
 tempfile = "=3.27.0"
-uuid = { version = "=1.28.0", features = ["v4"] }
 
 [profile.release]
 strip = true

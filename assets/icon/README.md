@@ -68,8 +68,6 @@ In points on a 22 × 16 canvas (menu bar items get at most 22 pt of the 24 pt me
 - **Cables:** 1.5 wide. Direct `M10 4 V12`, VPN `M3 4 C3 10.67 17 5.33 17 12` (the app icon's curve, scaled).
 - **Warning badge:** on the VPN cable's end jack. Triangle `M17 8.6 L20.6 15 H13.4 Z`, 0.8 round-joined stroke, 1.3 transparent clear space; the "!" (0.9 × 2.5 bar, 0.5-radius dot) is cut out.
 
-GPUI has no status item API; showing these needs the `tray-icon` crate or `NSStatusItem` via `objc2`.
-
 ## Export
 
 The exports are committed so builds don't need these tools. Re-run `./build.sh` after editing any SVG and commit the outputs with it.

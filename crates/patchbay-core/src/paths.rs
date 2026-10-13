@@ -86,6 +86,10 @@ impl Paths {
         self.state_dir().join("proxy-state.json")
     }
 
+    pub fn window_state_file(&self) -> PathBuf {
+        self.state_dir().join("window.json")
+    }
+
     pub fn ensure_dirs(&self) -> io::Result<()> {
         for dir in [
             self.config_dir(),
