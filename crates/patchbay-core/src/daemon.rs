@@ -62,8 +62,11 @@ pub fn write_generated_config(
     engine: &impl TunnelEngine,
     options: &RunOptions,
 ) -> anyhow::Result<()> {
+    let binary = require_binary(engine)?;
+    engine.check_binary(&binary)?;
     let server_conf = servers::read_server_config(paths, &options.server_file)?;
-    let config = engine.render_config(&server_conf, &options.engine)?;
+    let profile = servers::server_path(paths, &options.server_file);
+    let config = engine.render_config(options.protocol, &server_conf, &profile, &options.engine)?;
     paths.ensure_dirs()?;
     write_private(&paths.daemon_config_file(), &config)
 }

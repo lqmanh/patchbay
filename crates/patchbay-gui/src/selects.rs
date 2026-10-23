@@ -1,4 +1,4 @@
-use gpui_kit::component::select::SelectItem;
+use gpui_kit::component::{ActiveTheme, select::SelectItem, v_flex};
 use gpui_kit::*;
 
 use patchbay_core::config::Mode;
@@ -66,17 +66,11 @@ pub fn theme_items() -> Vec<ThemeItem> {
 }
 
 #[derive(Clone, PartialEq)]
-pub struct ServerItem {
-    pub file: String,
-    pub name: String,
-}
+pub struct ServerItem(Server);
 
 impl ServerItem {
     pub fn new(server: &Server) -> Self {
-        Self {
-            file: server.file.clone(),
-            name: server.name.clone(),
-        }
+        Self(server.clone())
     }
 }
 
@@ -84,10 +78,26 @@ impl SelectItem for ServerItem {
     type Value = String;
 
     fn title(&self) -> SharedString {
-        self.name.clone().into()
+        format!("{} · {}", self.0.name, self.0.protocol.label()).into()
+    }
+
+    fn display_title(&self) -> Option<AnyElement> {
+        Some(self.0.name.clone().into_any_element())
+    }
+
+    fn render(&self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        v_flex()
+            .child(div().truncate().child(self.0.name.clone()))
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .truncate()
+                    .child(format!("{} · {}", self.0.protocol.label(), self.0.file)),
+            )
     }
 
     fn value(&self) -> &String {
-        &self.file
+        &self.0.file
     }
 }

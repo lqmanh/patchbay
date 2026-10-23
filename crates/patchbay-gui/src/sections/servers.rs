@@ -1,7 +1,9 @@
 use gpui_kit::component::{
     ActiveTheme, Icon, IconName, Sizable, StyledExt as _,
     button::{Button, ButtonVariants},
-    h_flex, v_flex,
+    h_flex,
+    tag::Tag,
+    v_flex,
 };
 use gpui_kit::prelude::*;
 use gpui_kit::*;
@@ -56,7 +58,7 @@ impl AppShell {
             empty_state(
                 IconName::FolderOpen,
                 "No server configs",
-                "Add .conf files to the servers folder to pick one.",
+                "Add .conf or .ovpn files to the servers folder to pick one.",
                 Some(
                     Button::new("reveal-servers-empty")
                         .outline()
@@ -93,7 +95,14 @@ impl AppShell {
                                 .flex_1()
                                 .min_w_0()
                                 .child(div().text_sm().font_medium().child(name))
-                                .child(div().text_xs().text_color(muted).child(file_label)),
+                                .child(
+                                    h_flex()
+                                        .gap_2()
+                                        .child(
+                                            Tag::secondary().small().child(server.protocol.label()),
+                                        )
+                                        .child(div().text_xs().text_color(muted).child(file_label)),
+                                ),
                         )
                         .when(is_active, |this| {
                             this.child(Icon::new(IconName::CircleCheck).text_color(primary))

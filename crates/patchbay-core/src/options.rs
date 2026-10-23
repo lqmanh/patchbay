@@ -1,11 +1,12 @@
 use crate::config::AppConfig;
 use crate::engine::EngineOptions;
 use crate::paths::Paths;
-use crate::servers::{Server, pick_server};
+use crate::servers::{Protocol, Server, pick_server};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunOptions {
     pub server_file: String,
+    pub protocol: Protocol,
     pub engine: EngineOptions,
 }
 
@@ -13,6 +14,7 @@ pub fn build_run_options(config: &AppConfig, servers: &[Server]) -> Option<RunOp
     let server = pick_server(servers, config.active_server.as_deref())?;
     Some(RunOptions {
         server_file: server.file.clone(),
+        protocol: server.protocol,
         engine: EngineOptions {
             socks_port: config.socks_port,
             mode: config.mode,

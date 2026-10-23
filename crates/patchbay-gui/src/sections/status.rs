@@ -29,22 +29,16 @@ impl AppShell {
         let intercepting = state.intercepting();
         let busy = state.busy;
         let active = state.active_server().map(|server| server.file.clone());
-
-        let items_changed = self.server_items.len() != state.servers.len()
-            || self
-                .server_items
-                .iter()
-                .zip(&state.servers)
-                .any(|(item, server)| item.file != server.file || item.name != server.name);
         let active_changed = self
             .server_select
             .read(cx)
             .selected_value()
             .map(String::as_str)
             != active.as_deref();
-        if items_changed {
+
+        if self.servers != state.servers {
             let items: Vec<ServerItem> = state.servers.iter().map(ServerItem::new).collect();
-            self.server_items = items.clone();
+            self.servers = state.servers.clone();
             self.server_select
                 .update(cx, |select, cx| select.set_items(items, window, cx));
         }
@@ -92,7 +86,7 @@ impl AppShell {
         let active_control = Select::new(&self.server_select)
             .placeholder("No server")
             .accessibility_label("Active server")
-            .disabled(busy || self.server_items.is_empty())
+            .disabled(busy || self.servers.is_empty())
             .w(px(220.));
 
         let mode_control = Select::new(&self.mode_select)

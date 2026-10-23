@@ -17,8 +17,8 @@ Download the latest `Patchbay-<version>.dmg` from [Releases](https://github.com/
 ### Requirements
 
 - macOS 26 or later on Apple Silicon
-- [sing-box](https://github.com/SagerNet/sing-box) — `brew install sing-box`
-- WireGuard credential files from your VPN provider (e.g. MEGA VPN `.conf`) in `~/.config/patchbay/servers/`
+- [sing-box](https://github.com/SagerNet/sing-box) 1.14.0 or later — `brew install sing-box`
+- VPN credential files from your provider in `~/.config/patchbay/servers/`: WireGuard `.conf` (e.g. MEGA VPN) or OpenVPN `.ovpn`
 
 ### Build from source
 
@@ -37,6 +37,10 @@ In the browser's `about:config`, set (applies immediately, no restart):
 - `network.proxy.default_pac_script_socks_version` → `5`
 
 Keep the browser's proxy setting on "Use system proxy settings" (the default); "No proxy" and "Auto-detect proxy settings" bypass patchbay entirely. This path also resolves DNS at the proxy, which is what allows domain rules to match.
+
+### OpenVPN profiles
+
+OpenVPN profiles use the same engine. Inline `<ca>`, `<cert>`, `<key>` and `tls-auth`/`tls-crypt` blocks are read from the profile; if it uses `auth-user-pass` without a file, create `work.auth` next to `work.ovpn` with the username on the first line and the password on the second. TAP, static-key, PKCS#12 and passphrase-protected keys are not supported.
 
 ## Development
 

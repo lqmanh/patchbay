@@ -12,6 +12,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use patchbay_core::config::{self, DEFAULT_SOCKS_PORT};
+use patchbay_core::servers::Server;
 
 use crate::frame::WindowFrame;
 use crate::selects::{ModeItem, ServerItem, ThemeItem, mode_items, theme_items};
@@ -48,7 +49,7 @@ pub struct AppShell {
     pub(crate) rules_scroll: ScrollHandle,
     pub(crate) port_input: Entity<InputState>,
     pub(crate) server_select: Entity<SelectState<Vec<ServerItem>>>,
-    pub(crate) server_items: Vec<ServerItem>,
+    pub(crate) servers: Vec<Server>,
     pub(crate) mode_select: Entity<SelectState<Vec<ModeItem>>>,
     pub(crate) theme_select: Entity<SelectState<Vec<ThemeItem>>>,
     _port_input: Subscription,
@@ -159,7 +160,7 @@ impl AppShell {
             rules_scroll: ScrollHandle::new(),
             port_input,
             server_select,
-            server_items: Vec::new(),
+            servers: Vec::new(),
             mode_select,
             theme_select,
             _port_input: port_input_subscription,

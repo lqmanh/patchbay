@@ -69,6 +69,7 @@ pub fn run(requested: Option<&str>) -> anyhow::Result<u8> {
     daemon::stop(&paths)?;
     let options = RunOptions {
         server_file: server.file.clone(),
+        protocol: server.protocol,
         engine: EngineOptions {
             socks_port: DEFAULT_SOCKS_PORT,
             mode: Mode::Split,
@@ -169,7 +170,7 @@ fn run_checks(
     check(
         failures,
         "tunneled connections logged",
-        log.contains("endpoint/wireguard"),
+        log.contains("endpoint/"),
     );
     check(
         failures,
@@ -180,6 +181,7 @@ fn run_checks(
     println!("--- full mode ---");
     let full_options = RunOptions {
         server_file: options.server_file.clone(),
+        protocol: options.protocol,
         engine: EngineOptions {
             socks_port: DEFAULT_SOCKS_PORT,
             mode: Mode::Full,

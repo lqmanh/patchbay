@@ -83,7 +83,7 @@ impl AppShell {
 fn log_color(line: &str, theme: &Theme) -> Hsla {
     if line.contains("ERROR") || line.contains("WARN") {
         theme.danger
-    } else if line.contains("endpoint/wireguard") {
+    } else if line.contains("endpoint/") {
         theme.success
     } else if line.contains("outbound/direct") {
         theme.muted_foreground
