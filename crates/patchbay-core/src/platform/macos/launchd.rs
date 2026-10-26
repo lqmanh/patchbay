@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
+
 use crate::platform::LaunchdStatus;
 use crate::platform::exec::{run, run_checked};
 
@@ -52,6 +54,11 @@ pub fn build_plist(label: &str, args: &[String], log_path: &Path, keep_alive: bo
 
 pub fn build_launch_agent_plist(command: &[String], log_path: &Path) -> String {
     build_plist(DAEMON_LABEL, command, log_path, true)
+}
+
+pub fn build_transient_daemon_plist(command: &[String], log_path: &Path) -> String {
+    // No KeepAlive: the app's heal path owns restarting a dead daemon.
+    build_plist(DAEMON_LABEL, command, log_path, false)
 }
 
 pub fn build_intercept_agent_plist(command: &[String], log_path: &Path) -> String {
@@ -125,41 +132,79 @@ pub fn ensure_launch_agent_running(home: &Path) -> anyhow::Result<()> {
     if status.loaded {
         restart_launch_agent()
     } else {
-        bootstrap(home, DAEMON_LABEL)
+        bootstrap(&agent_path(home, DAEMON_LABEL), DAEMON_LABEL)
     }
+}
+
+pub fn start_daemon_job(
+    plist_path: &Path,
+    command: &[String],
+    log_path: &Path,
+) -> anyhow::Result<i32> {
+    let started = (|| -> anyhow::Result<i32> {
+        write_plist(plist_path, &build_transient_daemon_plist(command, log_path))?;
+        bootstrap(plist_path, DAEMON_LABEL)?;
+        let output = run_checked(
+            "launchctl",
+            &["kickstart", "-p", &service_target(DAEMON_LABEL)],
+        )?;
+        output
+            .trim()
+            .parse::<i32>()
+            .context("unexpected launchctl kickstart output")
+    })();
+    if started.is_err() {
+        stop_daemon_job(plist_path);
+    }
+    started
+}
+
+pub fn stop_daemon_job(plist_path: &Path) {
+    bootout(DAEMON_LABEL);
+    let _ = std::fs::remove_file(plist_path);
 }
 
 fn restart_launch_agent() -> anyhow::Result<()> {
     run_checked(
         "launchctl",
-        &["kickstart", "-k", &format!("{}/{}", domain(), DAEMON_LABEL)],
+        &["kickstart", "-k", &service_target(DAEMON_LABEL)],
     )?;
     Ok(())
 }
 
 fn install_agent(home: &Path, label: &str, plist: &str) -> anyhow::Result<()> {
-    let agents_dir = home.join("Library").join("LaunchAgents");
-    std::fs::create_dir_all(&agents_dir)?;
-    std::fs::write(agent_path(home, label), plist)?;
-    bootstrap(home, label)
+    let path = agent_path(home, label);
+    write_plist(&path, plist)?;
+    bootstrap(&path, label)
 }
 
 fn uninstall_agent(home: &Path, label: &str) -> anyhow::Result<()> {
-    bootout(home, label);
+    bootout(label);
     let _ = std::fs::remove_file(agent_path(home, label));
     Ok(())
 }
 
-fn bootstrap(home: &Path, label: &str) -> anyhow::Result<()> {
-    bootout(home, label);
-    let path = agent_path(home, label).display().to_string();
+fn write_plist(plist_path: &Path, contents: &str) -> anyhow::Result<()> {
+    if let Some(parent) = plist_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(plist_path, contents)?;
+    Ok(())
+}
+
+fn bootstrap(plist_path: &Path, label: &str) -> anyhow::Result<()> {
+    bootout(label);
+    let path = plist_path.display().to_string();
     run_checked("launchctl", &["bootstrap", &domain(), &path])?;
     Ok(())
 }
 
-fn bootout(home: &Path, label: &str) {
-    let path = agent_path(home, label).display().to_string();
-    let _ = run("launchctl", &["bootout", &domain(), &path]);
+fn bootout(label: &str) {
+    let _ = run("launchctl", &["bootout", &service_target(label)]);
+}
+
+fn service_target(label: &str) -> String {
+    format!("{}/{}", domain(), label)
 }
 
 fn agent_path(home: &Path, label: &str) -> PathBuf {

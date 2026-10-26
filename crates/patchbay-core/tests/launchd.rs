@@ -1,8 +1,19 @@
 use std::path::{Path, PathBuf};
 
 use patchbay_core::platform::macos::{
-    build_intercept_agent_plist, build_launch_agent_plist, intercept_agent_path, launch_agent_path,
+    build_intercept_agent_plist, build_launch_agent_plist, build_transient_daemon_plist,
+    intercept_agent_path, launch_agent_path,
 };
+
+fn singbox_command() -> [String; 5] {
+    [
+        "/opt/homebrew/bin/sing-box".to_string(),
+        "run".to_string(),
+        "-c".to_string(),
+        "/Users/me/.cache/patchbay/daemon.json".to_string(),
+        "--disable-color".to_string(),
+    ]
+}
 
 #[test]
 fn lives_in_the_users_launch_agents_directory() {
@@ -14,13 +25,7 @@ fn lives_in_the_users_launch_agents_directory() {
 
 #[test]
 fn builds_a_keep_alive_plist_with_the_sing_box_arguments() {
-    let command = [
-        "/opt/homebrew/bin/sing-box".to_string(),
-        "run".to_string(),
-        "-c".to_string(),
-        "/Users/me/.cache/patchbay/daemon.json".to_string(),
-        "--disable-color".to_string(),
-    ];
+    let command = singbox_command();
     let plist = build_launch_agent_plist(
         &command,
         Path::new("/Users/me/.local/state/patchbay/daemon.log"),
@@ -50,6 +55,22 @@ fn escapes_xml_sensitive_characters() {
 
     assert!(plist.contains("&amp;co"));
     assert!(plist.contains("&lt;config&gt;"));
+}
+
+#[test]
+fn builds_a_transient_daemon_plist_without_keep_alive() {
+    let command = singbox_command();
+    let plist = build_transient_daemon_plist(
+        &command,
+        Path::new("/Users/me/.local/state/patchbay/daemon.log"),
+    );
+
+    assert!(plist.contains("<string>io.github.lqmanh.patchbay.daemon</string>"));
+    assert!(plist.contains("<key>RunAtLoad</key>"));
+    assert!(!plist.contains("KeepAlive"));
+    assert!(plist.contains("<string>/opt/homebrew/bin/sing-box</string>"));
+    assert!(plist.contains("<string>/Users/me/.cache/patchbay/daemon.json</string>"));
+    assert!(plist.contains("<string>/Users/me/.local/state/patchbay/daemon.log</string>"));
 }
 
 #[test]

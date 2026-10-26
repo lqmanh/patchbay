@@ -131,11 +131,12 @@ impl AppState {
         let paths = Paths::from_env()?;
         let platform = MacPlatform::from_env()?;
         let config = config::load_config(&paths);
+        let servers = servers::list_servers(&paths);
         Ok(Self {
             paths,
             platform,
             config,
-            servers: Vec::new(),
+            servers,
             status: InterceptionStatus {
                 daemon: DaemonStatus::Stopped,
                 service: None,

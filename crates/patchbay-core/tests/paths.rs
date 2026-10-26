@@ -57,6 +57,16 @@ fn falls_back_to_conventional_locations() {
 }
 
 #[test]
+fn daemon_plist_lives_in_the_cache_directory() {
+    let paths = paths("/home/test", &[]);
+
+    assert_eq!(
+        paths.daemon_plist_file(),
+        PathBuf::from("/home/test/.cache/patchbay/daemon.plist")
+    );
+}
+
+#[test]
 fn ignores_empty_environment_values() {
     let paths = paths(
         "/home/test",

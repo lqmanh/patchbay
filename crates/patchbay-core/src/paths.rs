@@ -70,6 +70,10 @@ impl Paths {
         self.cache_dir().join("daemon.json")
     }
 
+    pub fn daemon_plist_file(&self) -> PathBuf {
+        self.cache_dir().join("daemon.plist")
+    }
+
     pub fn pid_file(&self) -> PathBuf {
         self.runtime_dir().join("daemon.pid")
     }

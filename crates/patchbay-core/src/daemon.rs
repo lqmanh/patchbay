@@ -2,9 +2,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::net::{SocketAddr, TcpStream};
 use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, SystemTime};
 
 use nix::errno::Errno;
@@ -14,6 +12,7 @@ use nix::unistd::Pid;
 use crate::engine::{TunnelEngine, require_binary};
 use crate::options::RunOptions;
 use crate::paths::Paths;
+use crate::platform::macos::{start_daemon_job, stop_daemon_job};
 use crate::servers;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(1500);
@@ -89,33 +88,18 @@ pub fn start(
     }
     write_generated_config(paths, engine, options)?;
 
-    let log = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(paths.log_file())?;
-    let mut process = Command::new(&command[0]);
-    process
-        .args(&command[1..])
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(log.try_clone()?))
-        .stderr(Stdio::from(log));
-    unsafe {
-        process.pre_exec(|| {
-            nix::unistd::setsid()
-                .map(|_| ())
-                .map_err(std::io::Error::from)
-        });
-    }
-    let mut child = process.spawn()?;
-    let pid = child.id() as i32;
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
-    std::fs::write(paths.pid_file(), pid.to_string())?;
+    // macOS tears down the launching terminal's coalition when it quits, and a
+    // plain child inherits it even from its own session. launchd must spawn the
+    // daemon into its own coalition.
+    let pid = start_daemon_job(&paths.daemon_plist_file(), &command, &paths.log_file())?;
+    std::fs::write(paths.pid_file(), pid.to_string())
+        .inspect_err(|_| stop_daemon_job(&paths.daemon_plist_file()))?;
     Ok(pid)
 }
 
 pub fn stop(paths: &Paths) -> anyhow::Result<()> {
+    stop_daemon_job(&paths.daemon_plist_file());
+    // Fallback for a daemon started by a build that spawned it directly.
     if let DaemonStatus::Running { pid } = status(paths) {
         let _ = kill(Pid::from_raw(pid), Signal::SIGTERM);
         let deadline = Instant::now() + STOP_TIMEOUT;
