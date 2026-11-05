@@ -52,6 +52,10 @@ actions!(
 );
 
 fn main() {
+    if let Some(code) = patchbay_core::daemon::launcher_main() {
+        std::process::exit(i32::from(code));
+    }
+
     // Accessibility is off, so VoiceOver can't read the app: with it on,
     // closing a window aborts in AppKit's Touch Bar KVO teardown (gpui bug).
     // Hiding the window instead would avoid that, but in the menu bar the app

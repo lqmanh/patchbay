@@ -18,7 +18,6 @@ fn uses_xdg_environment_overrides() {
             ("XDG_CONFIG_HOME", "/tmp/xdg-config"),
             ("XDG_CACHE_HOME", "/tmp/xdg-cache"),
             ("XDG_STATE_HOME", "/tmp/xdg-state"),
-            ("XDG_RUNTIME_DIR", "/tmp/xdg-runtime"),
         ],
     );
 
@@ -28,9 +27,19 @@ fn uses_xdg_environment_overrides() {
     );
     assert_eq!(paths.cache_dir(), PathBuf::from("/tmp/xdg-cache/patchbay"));
     assert_eq!(paths.state_dir(), PathBuf::from("/tmp/xdg-state/patchbay"));
+}
+
+#[test]
+fn keeps_the_pid_and_lock_files_in_the_state_directory() {
+    let paths = paths("/home/test", &[("XDG_STATE_HOME", "/tmp/xdg-state")]);
+
     assert_eq!(
-        paths.runtime_dir(),
-        PathBuf::from("/tmp/xdg-runtime/patchbay")
+        paths.pid_file(),
+        PathBuf::from("/tmp/xdg-state/patchbay/daemon.pid")
+    );
+    assert_eq!(
+        paths.daemon_lock_file(),
+        PathBuf::from("/tmp/xdg-state/patchbay/daemon.lock")
     );
 }
 
@@ -50,10 +59,6 @@ fn falls_back_to_conventional_locations() {
         paths.state_dir(),
         PathBuf::from("/home/test/.local/state/patchbay")
     );
-    assert_eq!(
-        paths.runtime_dir(),
-        PathBuf::from("/home/test/.local/state/patchbay")
-    );
 }
 
 #[test]
@@ -70,12 +75,15 @@ fn daemon_plist_lives_in_the_cache_directory() {
 fn ignores_empty_environment_values() {
     let paths = paths(
         "/home/test",
-        &[("XDG_CONFIG_HOME", ""), ("XDG_RUNTIME_DIR", "")],
+        &[("XDG_CONFIG_HOME", ""), ("XDG_STATE_HOME", "")],
     );
 
     assert_eq!(
         paths.config_dir(),
         PathBuf::from("/home/test/.config/patchbay")
     );
-    assert_eq!(paths.runtime_dir(), paths.state_dir());
+    assert_eq!(
+        paths.state_dir(),
+        PathBuf::from("/home/test/.local/state/patchbay")
+    );
 }

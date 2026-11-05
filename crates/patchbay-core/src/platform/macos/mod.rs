@@ -5,7 +5,7 @@ pub use launchd::{
     build_intercept_agent_plist, build_launch_agent_plist, build_transient_daemon_plist,
     intercept_agent_path, launch_agent_path,
 };
-pub(crate) use launchd::{start_daemon_job, stop_daemon_job};
+pub(crate) use launchd::{daemon_job_failure, start_daemon_job, stop_daemon_job};
 pub use proxy::{parse_active_interface, parse_service_for_device, parse_socks_state};
 
 use std::path::{Path, PathBuf};

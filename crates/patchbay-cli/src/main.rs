@@ -13,6 +13,9 @@ use patchbay_core::platform::macos::MacPlatform;
 use patchbay_core::servers;
 
 fn main() -> ExitCode {
+    if let Some(code) = daemon::launcher_main() {
+        return ExitCode::from(code);
+    }
     match run() {
         Ok(code) => ExitCode::from(code),
         Err(error) => {

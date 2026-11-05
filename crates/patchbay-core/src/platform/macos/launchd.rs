@@ -1,6 +1,6 @@
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-
-use anyhow::Context;
+use std::process::ExitStatus;
 
 use crate::platform::LaunchdStatus;
 use crate::platform::exec::{run, run_checked};
@@ -57,7 +57,8 @@ pub fn build_launch_agent_plist(command: &[String], log_path: &Path) -> String {
 }
 
 pub fn build_transient_daemon_plist(command: &[String], log_path: &Path) -> String {
-    // No KeepAlive: the app's heal path owns restarting a dead daemon.
+    // No KeepAlive: the job runs the one-shot launcher, and rerunning it would
+    // start another daemon. The app's heal path restarts a dead daemon.
     build_plist(DAEMON_LABEL, command, log_path, false)
 }
 
@@ -140,28 +141,29 @@ pub fn start_daemon_job(
     plist_path: &Path,
     command: &[String],
     log_path: &Path,
-) -> anyhow::Result<i32> {
-    let started = (|| -> anyhow::Result<i32> {
-        write_plist(plist_path, &build_transient_daemon_plist(command, log_path))?;
-        bootstrap(plist_path, DAEMON_LABEL)?;
-        let output = run_checked(
-            "launchctl",
-            &["kickstart", "-p", &service_target(DAEMON_LABEL)],
-        )?;
-        output
-            .trim()
-            .parse::<i32>()
-            .context("unexpected launchctl kickstart output")
-    })();
-    if started.is_err() {
-        stop_daemon_job(plist_path);
-    }
-    started
+) -> anyhow::Result<()> {
+    write_plist(plist_path, &build_transient_daemon_plist(command, log_path))?;
+    bootstrap(plist_path, DAEMON_LABEL)
 }
 
 pub fn stop_daemon_job(plist_path: &Path) {
     bootout(DAEMON_LABEL);
     let _ = std::fs::remove_file(plist_path);
+}
+
+/// How the daemon job's last run failed, if it has exited unsuccessfully and
+/// isn't running again. `None` while it's still running or hasn't exited yet.
+pub fn daemon_job_failure() -> Option<String> {
+    job_failure(&run_checked("launchctl", &["list", DAEMON_LABEL]).ok()?)
+}
+
+fn job_failure(list_output: &str) -> Option<String> {
+    if parse_pid(list_output).is_some() {
+        return None;
+    }
+    let raw = parse_number(list_output, "LastExitStatus")?;
+    let status = ExitStatus::from_raw(raw.try_into().ok()?);
+    (!status.success()).then(|| status.to_string())
 }
 
 fn restart_launch_agent() -> anyhow::Result<()> {
@@ -225,13 +227,44 @@ fn escape_xml(value: &str) -> String {
 }
 
 fn parse_pid(output: &str) -> Option<i32> {
-    let start = output.find("\"PID\"")? + "\"PID\"".len();
+    parse_number(output, "PID")?.try_into().ok()
+}
+
+/// Reads `"key" = <integer>;` from `launchctl list <label>` output.
+fn parse_number(output: &str, key: &str) -> Option<i64> {
+    let quoted = format!("\"{key}\"");
+    let start = output.find(&quoted)? + quoted.len();
     let rest = output[start..].trim_start();
     let rest = rest.strip_prefix('=')?.trim_start();
-    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-    if digits.is_empty() {
-        None
-    } else {
-        digits.parse().ok()
+    let end = rest
+        .find(|c: char| c != '-' && !c.is_ascii_digit())
+        .unwrap_or(rest.len());
+    rest[..end].parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EXITED: &str =
+        "{\n\t\"Label\" = \"io.github.lqmanh.patchbay.daemon\";\n\t\"LastExitStatus\" = 256;\n};\n";
+    const RUNNING: &str = "{\n\t\"LastExitStatus\" = 0;\n\t\"PID\" = 82779;\n};\n";
+
+    #[test]
+    fn parses_launchctl_list_numbers() {
+        assert_eq!(parse_number(EXITED, "LastExitStatus"), Some(256));
+        assert_eq!(parse_pid(EXITED), None);
+        assert_eq!(parse_pid(RUNNING), Some(82779));
+        assert_eq!(
+            parse_number("\"LastExitStatus\" = -1;", "LastExitStatus"),
+            Some(-1)
+        );
+    }
+
+    #[test]
+    fn reports_only_a_failed_exit_as_a_job_failure() {
+        assert_eq!(job_failure(EXITED).as_deref(), Some("exit status: 1"));
+        assert_eq!(job_failure(RUNNING), None);
+        assert_eq!(job_failure("{\n\t\"LastExitStatus\" = 0;\n};\n"), None);
     }
 }

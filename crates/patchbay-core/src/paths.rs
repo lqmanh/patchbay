@@ -13,7 +13,6 @@ pub struct Paths {
     config_home: PathBuf,
     cache_home: PathBuf,
     state_home: PathBuf,
-    runtime_home: Option<PathBuf>,
 }
 
 impl Paths {
@@ -29,9 +28,6 @@ impl Paths {
             config_home: xdg("XDG_CONFIG_HOME", ".config"),
             cache_home: xdg("XDG_CACHE_HOME", ".cache"),
             state_home: xdg("XDG_STATE_HOME", ".local/state"),
-            runtime_home: env("XDG_RUNTIME_DIR")
-                .filter(|value| !value.is_empty())
-                .map(PathBuf::from),
         }
     }
 
@@ -55,13 +51,6 @@ impl Paths {
         self.state_home.join("patchbay")
     }
 
-    pub fn runtime_dir(&self) -> PathBuf {
-        self.runtime_home
-            .as_ref()
-            .map(|home| home.join("patchbay"))
-            .unwrap_or_else(|| self.state_dir())
-    }
-
     pub fn config_file(&self) -> PathBuf {
         self.config_dir().join("config.json")
     }
@@ -75,7 +64,11 @@ impl Paths {
     }
 
     pub fn pid_file(&self) -> PathBuf {
-        self.runtime_dir().join("daemon.pid")
+        self.state_dir().join("daemon.pid")
+    }
+
+    pub fn daemon_lock_file(&self) -> PathBuf {
+        self.state_dir().join("daemon.lock")
     }
 
     pub fn log_file(&self) -> PathBuf {
@@ -100,7 +93,6 @@ impl Paths {
             self.servers_dir(),
             self.cache_dir(),
             self.state_dir(),
-            self.runtime_dir(),
         ] {
             std::fs::create_dir_all(dir)?;
         }

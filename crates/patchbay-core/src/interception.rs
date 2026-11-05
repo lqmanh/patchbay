@@ -114,11 +114,7 @@ pub fn ensure_daemon(
         platform.ensure_daemon_agent_running()?;
         return Ok(false);
     }
-    if matches!(daemon::status(paths), DaemonStatus::Running { .. }) {
-        return Ok(false);
-    }
-    daemon::start(paths, engine, options)?;
-    Ok(true)
+    daemon::ensure_running(paths, engine, options)
 }
 
 pub fn enable_interception(
