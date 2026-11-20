@@ -8,7 +8,12 @@
 
 ## Features
 
-TBD
+- Split or full tunnel, with domain and regex rules
+- WireGuard and OpenVPN servers
+- System-wide interception via the macOS SOCKS proxy
+- DNS-over-HTTPS for direct traffic
+- Menu bar control, background tunnel, and start at login
+- Headless CLI
 
 ## Installation
 
