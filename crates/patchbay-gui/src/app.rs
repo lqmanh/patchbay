@@ -1,8 +1,5 @@
-use std::rc::Rc;
-
 use gpui_kit::component::{
-    ActiveTheme, Icon, IconName, IndexPath, Sizable, StyledExt as _, TitleBar,
-    VirtualListScrollHandle, h_flex,
+    ActiveTheme, Icon, IconName, IndexPath, Sizable, StyledExt as _, TitleBar, h_flex,
     input::{InputEvent, InputState},
     select::{SelectEvent, SelectItem, SelectState},
     sidebar::{Sidebar, SidebarCollapsible, SidebarMenu, SidebarMenuItem, SidebarToggleButton},
@@ -44,9 +41,8 @@ pub struct AppShell {
     pub(crate) section: Section,
     pub(crate) collapsed: bool,
     frame: Option<WindowFrame>,
-    pub(crate) log_follow: bool,
-    pub(crate) log_sizes: Rc<Vec<Size<Pixels>>>,
-    pub(crate) log_scroll: VirtualListScrollHandle,
+    pub(crate) log_list: ListState,
+    pub(crate) log_dropped_seen: usize,
     pub(crate) servers_scroll: ScrollHandle,
     pub(crate) rules_scroll: ScrollHandle,
     pub(crate) port_input: Entity<InputState>,
@@ -150,7 +146,10 @@ impl AppShell {
             },
         );
 
-        let state_subscription = cx.observe(&state, |_, _, cx| cx.notify());
+        let state_subscription = cx.observe(&state, |this, _, cx| {
+            this.sync_log_list(cx);
+            cx.notify();
+        });
 
         let appearance = window.observe_window_appearance({
             let state = state.clone();
@@ -164,14 +163,16 @@ impl AppShell {
         let bounds = cx.observe_window_bounds(window, Self::track_bounds);
         let display = cx.observe_window_display(window, Self::track_display);
 
+        let log_list = crate::sections::log::new_log_list(state.read(cx).log_lines.len());
+        let log_dropped_seen = state.read(cx).log_dropped;
+
         Self {
             state,
             section: layout.section,
             collapsed: layout.collapsed,
             frame: WindowFrame::of(window, cx).or(layout.frame),
-            log_follow: true,
-            log_sizes: Rc::new(Vec::new()),
-            log_scroll: VirtualListScrollHandle::new(),
+            log_list,
+            log_dropped_seen,
             servers_scroll: ScrollHandle::new(),
             rules_scroll: ScrollHandle::new(),
             port_input,

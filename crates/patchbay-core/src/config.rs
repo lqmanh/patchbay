@@ -12,8 +12,7 @@ pub enum Mode {
     Full,
 }
 
-/// Resolver for domains that don't go through the VPN. The presets use DoH
-/// server IPs so no bootstrap resolver is needed.
+/// Resolver for domains that don't go through the VPN.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DirectDns {

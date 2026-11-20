@@ -117,6 +117,9 @@ pub struct AppState {
     pub status: InterceptionStatus,
     pub intercept_agent: bool,
     pub log_lines: Vec<SharedString>,
+    /// Lines dropped from the head of the sliding log window. Monotonic, so
+    /// a fresh window can baseline at the current value.
+    pub log_dropped: usize,
     pub ready: Option<bool>,
     pub busy: bool,
     log_stamp: Option<(u64, SystemTime)>,
@@ -145,6 +148,7 @@ impl AppState {
             },
             intercept_agent: false,
             log_lines: Vec::new(),
+            log_dropped: 0,
             ready: None,
             busy: false,
             log_stamp: None,
@@ -303,6 +307,7 @@ impl AppState {
                 if unchanged {
                     return;
                 }
+                this.log_dropped += dropped_lines(&this.log_lines, &lines);
                 this.log_lines = lines.into_iter().map(SharedString::from).collect();
                 cx.notify();
             },
@@ -553,6 +558,18 @@ impl AppState {
 
 fn is_broken(status: &InterceptionStatus) -> bool {
     status.intercepting() && !status.daemon.is_running()
+}
+
+/// Lines that fell out of the head of the sliding log window: the new
+/// window's first line is the old one's `n`-th. A head that appears nowhere
+/// in the old window means the log was replaced.
+fn dropped_lines(old: &[SharedString], new: &[String]) -> usize {
+    let Some(head) = new.first() else {
+        return 0;
+    };
+    old.iter()
+        .position(|line| line.as_ref() == head.as_str())
+        .unwrap_or(old.len())
 }
 
 fn ensure_launch_at_login(snapshot: &Snapshot) -> bool {
