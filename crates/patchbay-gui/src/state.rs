@@ -3,7 +3,7 @@ use std::time::{Duration, SystemTime};
 use gpui_kit::component::{IconName, Theme, ThemeMode};
 use gpui_kit::*;
 
-use patchbay_core::config::{self, AppConfig, Mode};
+use patchbay_core::config::{self, AppConfig, DirectDns, Mode};
 use patchbay_core::daemon::{self, DaemonStatus};
 use patchbay_core::domains::{self, RuleKind};
 use patchbay_core::engine::singbox::Singbox;
@@ -395,6 +395,10 @@ impl AppState {
         self.mutate_and_apply(cx, move |config| config.mode = mode);
     }
 
+    pub fn set_direct_dns(&mut self, dns: DirectDns, cx: &mut Context<Self>) {
+        self.mutate_and_apply(cx, move |config| config.direct_dns = dns);
+    }
+
     pub fn set_socks_port(&mut self, port: u16, cx: &mut Context<Self>) {
         if port == self.config.socks_port {
             return;
@@ -458,6 +462,9 @@ impl AppState {
     }
 
     pub fn set_theme(&mut self, pref: ThemePref, cx: &mut Context<Self>) {
+        if self.theme() == pref {
+            return;
+        }
         self.config.theme = pref.as_str().to_string();
         let paths = self.paths.clone();
         let config = self.config.clone();
@@ -498,7 +505,11 @@ impl AppState {
     }
 
     fn mutate_and_apply(&mut self, cx: &mut Context<Self>, mutate: impl FnOnce(&mut AppConfig)) {
+        let before = self.config.clone();
         mutate(&mut self.config);
+        if self.config == before {
+            return;
+        }
         let restart_daemon = self.running();
         self.save_and_apply(cx, restart_daemon);
     }

@@ -6,7 +6,9 @@ use patchbay_core::config::MIN_SOCKS_PORT;
 use patchbay_core::interception;
 
 use crate::app::AppShell;
-use crate::widgets::{field_row, group_box, group_title, page_body, separated_rows};
+use crate::widgets::{
+    CONTROL_WIDTH, MENU_WIDTH, field_row, group_box, group_title, page_body, separated_rows,
+};
 
 impl AppShell {
     pub(crate) fn settings_section(
@@ -50,7 +52,14 @@ impl AppShell {
         let theme_control = Select::new(&self.theme_select)
             .accessibility_label("Theme")
             .disabled(busy)
-            .w(px(140.));
+            .w(CONTROL_WIDTH)
+            .menu_width(MENU_WIDTH);
+
+        let direct_dns_control = Select::new(&self.direct_dns_select)
+            .accessibility_label("Direct DNS")
+            .disabled(busy)
+            .w(CONTROL_WIDTH)
+            .menu_width(MENU_WIDTH);
 
         let port_description = if port_pending {
             "Restart to apply the new port.".to_string()
@@ -61,15 +70,25 @@ impl AppShell {
             )
         };
 
-        let tunnel_rows = vec![
-            field_row(
-                cx,
-                "SOCKS port",
-                port_description,
-                Input::new(&self.port_input).w(px(120.)),
-            )
-            .into_any_element(),
-        ];
+        let tunnel_rows = separated_rows(
+            cx,
+            vec![
+                field_row(
+                    cx,
+                    "SOCKS port",
+                    port_description,
+                    Input::new(&self.port_input).w(CONTROL_WIDTH),
+                )
+                .into_any_element(),
+                field_row(
+                    cx,
+                    "Direct DNS",
+                    "Resolves domains outside the VPN",
+                    direct_dns_control,
+                )
+                .into_any_element(),
+            ],
+        );
 
         let startup_rows = separated_rows(
             cx,

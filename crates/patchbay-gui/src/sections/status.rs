@@ -8,7 +8,7 @@ use gpui_kit::*;
 use crate::app::AppShell;
 use crate::selects::ServerItem;
 use crate::state::StateKind;
-use crate::widgets::{field_row, group_box, page_body, separated_rows};
+use crate::widgets::{CONTROL_WIDTH, MENU_WIDTH, field_row, group_box, page_body, separated_rows};
 
 impl AppShell {
     pub(crate) fn status_section(
@@ -87,12 +87,14 @@ impl AppShell {
             .placeholder("No server")
             .accessibility_label("Active server")
             .disabled(busy || self.servers.is_empty())
-            .w(px(220.));
+            .w(CONTROL_WIDTH)
+            .menu_width(MENU_WIDTH);
 
         let mode_control = Select::new(&self.mode_select)
             .accessibility_label("Mode")
             .disabled(busy)
-            .w(px(220.));
+            .w(CONTROL_WIDTH)
+            .menu_width(MENU_WIDTH);
 
         let restart_control = Button::new("restart-tunnel")
             .outline()

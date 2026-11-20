@@ -18,6 +18,7 @@ pub fn build_run_options(config: &AppConfig, servers: &[Server]) -> Option<RunOp
         engine: EngineOptions {
             socks_port: config.socks_port,
             mode: config.mode,
+            direct_dns: config.direct_dns,
             domains: config.domains.clone(),
         },
     })

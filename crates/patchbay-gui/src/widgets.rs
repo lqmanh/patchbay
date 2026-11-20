@@ -14,6 +14,10 @@ use gpui_kit::component::{
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
+/// Shared widths so field controls line up across pages.
+pub const CONTROL_WIDTH: Pixels = px(160.);
+pub const MENU_WIDTH: Pixels = px(240.);
+
 static LOGO: LazyLock<Arc<Image>> = LazyLock::new(|| {
     Arc::new(Image::from_bytes(
         ImageFormat::Svg,

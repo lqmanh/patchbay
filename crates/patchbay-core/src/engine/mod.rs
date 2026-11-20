@@ -2,7 +2,7 @@ pub mod singbox;
 
 use std::path::{Path, PathBuf};
 
-use crate::config::Mode;
+use crate::config::{DirectDns, Mode};
 use crate::domains::DomainRule;
 use crate::servers::Protocol;
 
@@ -10,6 +10,7 @@ use crate::servers::Protocol;
 pub struct EngineOptions {
     pub socks_port: u16,
     pub mode: Mode,
+    pub direct_dns: DirectDns,
     pub domains: Vec<DomainRule>,
 }
 

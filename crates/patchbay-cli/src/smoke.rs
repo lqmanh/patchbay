@@ -1,7 +1,7 @@
 use std::process::Command;
 use std::time::Duration;
 
-use patchbay_core::config::{DEFAULT_SOCKS_PORT, Mode};
+use patchbay_core::config::{DEFAULT_SOCKS_PORT, DirectDns, Mode};
 use patchbay_core::daemon::{self, DaemonStatus};
 use patchbay_core::domains::{RuleKind, create_rule};
 use patchbay_core::engine::singbox::Singbox;
@@ -73,6 +73,7 @@ pub fn run(requested: Option<&str>) -> anyhow::Result<u8> {
         engine: EngineOptions {
             socks_port: DEFAULT_SOCKS_PORT,
             mode: Mode::Split,
+            direct_dns: DirectDns::default(),
             domains: vec![
                 create_rule("reddit.com", RuleKind::Domain).expect("reddit rule"),
                 create_rule("medium.com", RuleKind::Domain).expect("medium rule"),
@@ -185,6 +186,7 @@ fn run_checks(
         engine: EngineOptions {
             socks_port: DEFAULT_SOCKS_PORT,
             mode: Mode::Full,
+            direct_dns: DirectDns::default(),
             domains: Vec::new(),
         },
     };

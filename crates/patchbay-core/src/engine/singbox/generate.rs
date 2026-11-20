@@ -58,6 +58,11 @@ pub fn generate_config(
     }
 
     let tunnel_dns = dns.unwrap_or_else(|| "1.1.1.1".to_string());
+    // A preset DoH server uses an IP literal, so it needs no bootstrap resolver.
+    let direct_dns_server = match options.direct_dns.doh_server() {
+        Some(server) => json!({ "type": "https", "tag": "dns-direct", "server": server }),
+        None => json!({ "type": "local", "tag": "dns-direct" }),
+    };
 
     let config = GeneratedConfig {
         log: LogConfig {
@@ -66,7 +71,7 @@ pub fn generate_config(
         },
         dns: DnsConfig {
             servers: vec![
-                json!({ "type": "local", "tag": "dns-direct" }),
+                direct_dns_server,
                 json!({
                     "type": "udp",
                     "tag": "dns-tunnel",

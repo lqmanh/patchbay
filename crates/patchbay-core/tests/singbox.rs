@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use patchbay_core::config::Mode;
+use patchbay_core::config::{DirectDns, Mode};
 use patchbay_core::domains::{DomainRule, RuleKind};
 use patchbay_core::engine::EngineOptions;
 use patchbay_core::engine::singbox::generate_config;
@@ -49,6 +49,7 @@ fn base() -> EngineOptions {
     EngineOptions {
         socks_port: 25344,
         mode: Mode::Split,
+        direct_dns: DirectDns::System,
         domains: vec![
             rule("a", "reddit.com", RuleKind::Domain, true),
             rule("b", "medium.com", RuleKind::Domain, false),
@@ -60,6 +61,7 @@ fn full_options() -> EngineOptions {
     EngineOptions {
         socks_port: 1080,
         mode: Mode::Full,
+        direct_dns: DirectDns::System,
         domains: vec![
             rule("r", "^.*\\.example\\.com$", RuleKind::Regex, true),
             rule("d", "reddit.com", RuleKind::Domain, true),
@@ -187,6 +189,19 @@ fn resolves_tunneled_domains_through_the_tunnel_dns() {
     );
     assert_eq!(generated["dns"]["final"], "dns-direct");
     assert_eq!(generated["route"]["default_domain_resolver"], "dns-direct");
+}
+
+#[test]
+fn direct_dns_preset_uses_doh() {
+    // The System/local server is covered by split_output_matches_reference.
+    let generated = config(&EngineOptions {
+        direct_dns: DirectDns::Cloudflare,
+        ..base()
+    });
+    assert_eq!(
+        generated["dns"]["servers"][0],
+        json!({ "type": "https", "tag": "dns-direct", "server": "1.1.1.1" })
+    );
 }
 
 #[test]

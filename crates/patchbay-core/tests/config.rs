@@ -1,4 +1,6 @@
-use patchbay_core::config::{AppConfig, Mode, default_config, parse_port_text, sanitize_config};
+use patchbay_core::config::{
+    AppConfig, DirectDns, Mode, default_config, parse_port_text, sanitize_config,
+};
 use patchbay_core::domains::RuleKind;
 use serde_json::json;
 
@@ -58,6 +60,16 @@ fn sanitize_keeps_valid_values() {
             theme: "dark".into(),
             ..default_config()
         }
+    );
+}
+
+#[test]
+fn sanitize_parses_direct_dns_and_falls_back_to_system() {
+    let sanitized = sanitize_config(&json!({ "directDns": "cloudflare" }));
+    assert_eq!(sanitized.direct_dns, DirectDns::Cloudflare);
+    assert_eq!(
+        sanitize_config(&json!({ "directDns": "nextdns" })).direct_dns,
+        DirectDns::System
     );
 }
 

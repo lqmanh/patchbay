@@ -11,11 +11,13 @@ use gpui_kit::component::{
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 
-use patchbay_core::config::{self, DEFAULT_SOCKS_PORT};
+use patchbay_core::config::{self, DEFAULT_SOCKS_PORT, DirectDns, Mode};
 use patchbay_core::servers::Server;
 
 use crate::frame::WindowFrame;
-use crate::selects::{ModeItem, ServerItem, ThemeItem, mode_items, theme_items};
+use crate::selects::{
+    DetailItem, ServerItem, ThemeItem, direct_dns_items, mode_items, theme_items,
+};
 use crate::state::{AppState, ThemePref};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -50,12 +52,14 @@ pub struct AppShell {
     pub(crate) port_input: Entity<InputState>,
     pub(crate) server_select: Entity<SelectState<Vec<ServerItem>>>,
     pub(crate) servers: Vec<Server>,
-    pub(crate) mode_select: Entity<SelectState<Vec<ModeItem>>>,
+    pub(crate) mode_select: Entity<SelectState<Vec<DetailItem<Mode>>>>,
     pub(crate) theme_select: Entity<SelectState<Vec<ThemeItem>>>,
+    pub(crate) direct_dns_select: Entity<SelectState<Vec<DetailItem<DirectDns>>>>,
     _port_input: Subscription,
     _server_select: Subscription,
     _mode_select: Subscription,
     _theme_select: Subscription,
+    _direct_dns_select: Subscription,
     _state: Subscription,
     _appearance: Subscription,
     _bounds: Subscription,
@@ -123,6 +127,18 @@ impl AppShell {
             },
         );
 
+        let direct_dns = state.read(cx).config.direct_dns;
+        let (direct_dns_select, direct_dns_subscription) = select(
+            cx,
+            window,
+            direct_dns_items(),
+            Some(&direct_dns),
+            |this, dns, _, cx| {
+                this.state
+                    .update(cx, |state, cx| state.set_direct_dns(dns, cx));
+            },
+        );
+
         let (server_select, server_subscription) = select(
             cx,
             window,
@@ -163,10 +179,12 @@ impl AppShell {
             servers: Vec::new(),
             mode_select,
             theme_select,
+            direct_dns_select,
             _port_input: port_input_subscription,
             _server_select: server_subscription,
             _mode_select: mode_subscription,
             _theme_select: theme_subscription,
+            _direct_dns_select: direct_dns_subscription,
             _state: state_subscription,
             _appearance: appearance,
             _bounds: bounds,

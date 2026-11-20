@@ -12,6 +12,41 @@ pub enum Mode {
     Full,
 }
 
+/// Resolver for domains that don't go through the VPN. The presets use DoH
+/// server IPs so no bootstrap resolver is needed.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DirectDns {
+    #[default]
+    System,
+    Cloudflare,
+    Google,
+    Quad9,
+}
+
+impl DirectDns {
+    pub const ALL: [Self; 4] = [Self::System, Self::Cloudflare, Self::Google, Self::Quad9];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::System => "System",
+            Self::Cloudflare => "Cloudflare",
+            Self::Google => "Google",
+            Self::Quad9 => "Quad9",
+        }
+    }
+
+    /// DoH server address; `None` for `System`, which uses the gateway resolver.
+    pub fn doh_server(self) -> Option<&'static str> {
+        match self {
+            Self::System => None,
+            Self::Cloudflare => Some("1.1.1.1"),
+            Self::Google => Some("8.8.8.8"),
+            Self::Quad9 => Some("9.9.9.9"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
@@ -20,6 +55,7 @@ pub struct AppConfig {
     pub active_server: Option<String>,
     pub domains: Vec<DomainRule>,
     pub theme: String,
+    pub direct_dns: DirectDns,
 }
 
 pub const DEFAULT_SOCKS_PORT: u16 = 25344;
@@ -33,6 +69,7 @@ pub fn default_config() -> AppConfig {
         active_server: None,
         domains: Vec::new(),
         theme: DEFAULT_THEME.to_string(),
+        direct_dns: DirectDns::System,
     }
 }
 
@@ -84,6 +121,12 @@ pub fn sanitize_config(input: &Value) -> AppConfig {
         .filter(|theme| !theme.is_empty())
     {
         config.theme = theme.to_string();
+    }
+    if let Some(direct_dns) = raw
+        .get("directDns")
+        .and_then(|value| DirectDns::deserialize(value).ok())
+    {
+        config.direct_dns = direct_dns;
     }
     config
 }
